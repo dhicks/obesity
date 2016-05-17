@@ -3,6 +3,7 @@ library(dplyr)
 library(foreign)
 
 ## TODO: load NHANES III data
+## TODO: education level
 
 suffixes = c('', '_B', '_C')
 
@@ -43,6 +44,11 @@ for (file in files) {
 ## Variables of interest: 
 ## SEQN: 	Respondent sequence number
 ## SMQ020: 	Smoked at least 100 cigarettes in life
+## SMQ120: 	Smoked a pipe at least 20 times in life
+## SMQ150: 	Smoked cigars at least 20 times in life
+## SMQ180:  Used snuff at least 20 times in life
+## SMQ210:	Used chewing tobacco 20 times in life
+##	NB Stokes 2014 doesn't identify exactly which columns were used to define non-smokers
 ##	1: Yes
 ##	2: No
 ##	7: Refused
@@ -52,12 +58,19 @@ data_smq = data.frame(id = c(), smoker = c())
 for (file in files) {
 	readdata = read.xport(file)
 	readdata = readdata %>%
-		transmute(id = SEQN, smoker = SMQ020)
+		transmute(id = SEQN, cigarettes = SMQ020, pipe = SMQ120, 
+				  cigars = SMQ150, snuff = SMQ180, chew = SMQ210)
 	readdata[readdata == 7] = NA
 	readdata[readdata == 9] = NA
+	readdata = readdata %>%
+		transmute(id = id, smoker = (cigarettes == 1) | 
+				  					(pipe == 1) | 
+				  					(cigars == 1) | 
+				  					(snuff == 1) |
+				  					(chew == 1))
 	data_smq = rbind(data_smq, readdata)
 }
-data_smq$smoker = data_smq$smoker == 1
+
 
 
 ## Body Measures
@@ -129,12 +142,7 @@ df = full_join(data_demo, data_bmx) %>%
 	## Calculate maximum BMI
 	mutate(bmi.max = weight.max / (height/100)**2) %>%
 	full_join(data_mort)
-## Filter down to complete cases
-df = df[complete.cases(df), ]
-## Filter down to non-smokers between 50 and 85
-df = df %>% filter(!smoker, age.months >= 50*12, age.months <= 85*12)
 
-## ----------
 ## Define BMI categories
 bmi_breaks = c(18.5, 25, 30, 35, Inf)
 names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
@@ -148,12 +156,12 @@ df$bmi.max.cat = sapply(df$bmi.max, bmi_classify) %>% factor(levels = names(bmi_
 
 # 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
-df %>% filter(bmi.cat > bmi.max.cat) %>% nrow
+#df %>% filter(bmi.cat > bmi.max.cat) %>% nrow
 # 
 # ## Plots of BMI against maximum BMI
-ggplot(data = df, aes(x = bmi, y = bmi.max)) + geom_point()
-ggplot(data = {df %>% group_by(bmi.cat, bmi.max.cat) %>% summarize(n = n())},
-	   aes(x = bmi.cat, y = bmi.max.cat, fill = n)) + geom_tile()
+#ggplot(data = df, aes(x = bmi, y = bmi.max)) + geom_point()
+# ggplot(data = {df %>% group_by(bmi.cat, bmi.max.cat) %>% summarize(n = n())},
+# 	   aes(x = bmi.cat, y = bmi.max.cat, fill = n)) + geom_tile()
 # 
 # ## Histograms
 # bmi_hist = ggplot(data = df, aes(x = bmi, fill = race.ethnicity)) +
@@ -166,32 +174,3 @@ ggplot(data = {df %>% group_by(bmi.cat, bmi.max.cat) %>% summarize(n = n())},
 # plot_grid(bmi_hist, bmi_cat_hist, labels = 'AUTO', rel_widths = c(1, 1.2))
 # 
 # 
-# ## ----------
-ggplot(data = df, aes(x = bmi, y = as.numeric(mort.status) - 1, 
-					  color = race.ethnicity, 
-					  shape = sex, linetype = sex)) +
-	geom_point(position = position_jitter(height = .25), alpha = .1) +
-	stat_smooth(alpha = .2) +
-	geom_vline(xintercept = bmi_breaks, color = 'grey') +
-	scale_y_continuous(name = 'mortality', breaks = c(0,1), 
-					   labels = c('alive', 'deceased')) +
-	scale_x_continuous(limits = c(NA, 50)) +
-	facet_wrap(~ race.ethnicity)
-	# stat_smooth(method = 'glm',
-	# 			formula = mort.status ~ sex + age.months + race.ethnicity + bmi)
-
-fit1 = glm(mort.status ~ bmi,
-		  family = binomial,
-		  data = df)
-summary(fit1)
-
-fit2 = glm(mort.status ~ bmi + sex + age.months + race.ethnicity, 
-		  family = binomial, 
-		  data = df)
-summary(fit2)
-
-fit3 = glm(mort.status ~ bmi + bmi.max + sex + age.months + race.ethnicity, 
-		   family = binomial, 
-		   data = df)
-summary(fit3)
-exp(fit3$coefficients)
