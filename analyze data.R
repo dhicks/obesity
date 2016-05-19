@@ -3,7 +3,9 @@
 library(cowplot)
 library(dplyr)
 library(survival)
-load('2016-05-18.RData')
+load('2016-05-19.RData')
+
+## TODO: the models seem to be overly precise with sample weights.  need to get help!
 
 ## Filter down to complete cases
 df = df[complete.cases(df), ]
@@ -23,14 +25,16 @@ survobj = with(df, Surv(age.months, mort.status == 'deceased'))
 
 ## Cox proportional hazards models
 ## Set this option to get desired behavior w/ ordered factors
-options(contrasts = c("contr.treatment", "contr.treatment"))
+#options(contrasts = c("contr.treatment", "contr.poly"))
 ## Breaking BMI and max BMI into categories
-coxfit.cat = coxph(survobj ~ sex + race.ethnicity + 
-				   bmi.cat * bmi.max.cat,
-				   data = df)
+coxfit.cat = coxph(survobj ~ sex + race.ethnicity + education +
+				   bmi.cat + bmi.max.cat,
+				   data = df, weights = sample.weight)
 summary(coxfit.cat)
 ## Continuous BMI and max BMI
-coxfit.cont = coxph(survobj ~ sex + race.ethnicity + bmi * bmi.max, data = df)
+coxfit.cont = coxph(survobj ~ sex + race.ethnicity + education + 
+						bmi + bmi.max, 
+					data = df, weights = sample.weight)
 summary(coxfit.cont)
 
 

@@ -3,7 +3,6 @@ library(dplyr)
 library(foreign)
 
 ## TODO: load NHANES III data
-## TODO: education level
 
 suffixes = c('', '_B', '_C')
 
@@ -15,12 +14,28 @@ suffixes = c('', '_B', '_C')
 ##	1: Male [sic]
 ##	2: Female [sic]
 ## RIDAGEEX:Best age in months at date of examination for individuals under 80 years of age at the time of MEC exam.
+##	NB It's not clear whether Stokes 2014 used age in months or integer years
 ## RIDRETH1:Recode of reported race and ethnicity information.
 ##	1: Mexican American
 ##	2: Other Hispanic
 ##	3: Non-Hispanic White
 ## 	4: Non-Hispanic Black
 ##	5: Other Race - Including Multi-Racial
+## DMDEDUC2:Education Level - Adults 20+
+##	NB It's not clear which variable Stokes 2014 used to control for education
+##	1:	Less than 9th Grade
+##	2:	9th-11th Grade
+##	3:	High School Grad/GED or Equivalent
+##	4:	Some College or AA Degree
+##	5:	College Graduate or Above
+##	7:	Refused
+##	9:	Don't Know
+## SDDSRVYR:Data Release Number
+##	1:	1999-2000
+##	2:	2001-2002
+##	3:	2003-2004
+## WTMEC4YR:4-Year Sample Weights
+## WTMEC2YR:2-Year Sample Weights
 files = paste('NHANES/DEMO', suffixes, '.XPT', sep = '')
 data_demo = data.frame(id = c(), sex = c(), age.months = c(), race.ethnicity = c())
 for (file in files) {
@@ -29,15 +44,29 @@ for (file in files) {
 		transmute(id = SEQN, 
 				  sex = factor(RIAGENDR, labels = c('male', 'female')),
 				  age.months = RIDAGEEX,
+				  age.years = age.months %/% 12,
 				  race.ethnicity = factor(RIDRETH1, 
 				  						labels = c('Mexican American', 
 				  								   'Other Hispanic', 
 				  								   'Non-Hispanic White',
 				  								   'Non-Hispanic Black', 
-				  								   'Other, Multiracial')))
+				  								   'Other, Multiracial')),
+				  education = factor(DMDEDUC2, 
+				  				   labels = c('Less than High School', 
+				  				   		   		'Some High School', 
+				  				   		   		'High School', 
+				  				   		   		'Some College',
+				  				   		   		'College',
+				  				   		   		NA, 
+				  				   		   		NA), ordered = TRUE),
+				  sample.weight = ifelse(SDDSRVYR != 3, 
+				  					   2/3 * WTMEC4YR,  # 1999-2002
+				  					   1/3 * WTMEC2YR	# 2003-2004
+				  					   ))
 	data_demo = rbind(data_demo, readdata)
 }
 data_demo$race.ethnicity = relevel(data_demo$race.ethnicity, 'Non-Hispanic White')
+data_demo$education = C(data_demo$education, treatment, base = 3)
 
 
 ## Smoking Data
@@ -113,6 +142,7 @@ for (file in files) {
 
 ## Public-use Linked Mortality Files
 ## http://www.cdc.gov/nchs/data_access/data_linkage/mortality/data_files_data_dictionaries.htm
+##	NB Stokes 2014 use the 2006 edition; I was only able to find the 2011 edition
 ## Variables of interest:  
 ## Col. 1-5: 	NHANES Respondent Sequence Number
 ## Col. 16:		Final Morality Status
