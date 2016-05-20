@@ -149,22 +149,29 @@ for (file in files) {
 ##	0: Assumed alive
 ##	1: Assumed decreased
 ##  Blank: Ineligible or under age 18
-files = paste('mortality/NHANES_', c('1999_2000', '2001_2002', '2003_2004'), 
-			  '_MORT_2011_PUBLIC.dat', sep = '')
-data_mort = data.frame(id = numeric(), mort.status = numeric())
-for (file in files) {
-	unparsed = readLines(file)
-	unparsed = strsplit(unparsed, '\n')
-	for (entry in unparsed) {
-		this_id = substr(entry, 1, 5)
-		this_mort_status = substr(entry, 16, 16)
-		new_line = data.frame(id = as.numeric(this_id), 
-							  mort.status = as.numeric(this_mort_status))
-		data_mort = rbind(data_mort, new_line)
+data_mort_file = 'data_mort.Rdata'
+if (file.exists(data_mort_file)) {
+	## The parsing code in the other branch is slow, so we save parsed data
+	load(data_mort_file)
+} else {
+	files = paste('mortality/NHANES_', c('1999_2000', '2001_2002', '2003_2004'), 
+				  '_MORT_2011_PUBLIC.dat', sep = '')
+	data_mort = data.frame(id = numeric(), mort.status = numeric())
+	for (file in files) {
+		unparsed = readLines(file)
+		unparsed = strsplit(unparsed, '\n')
+		for (entry in unparsed) {
+			this_id = substr(entry, 1, 5)
+			this_mort_status = substr(entry, 16, 16)
+			new_line = data.frame(id = as.numeric(this_id), 
+								  mort.status = as.numeric(this_mort_status))
+			data_mort = rbind(data_mort, new_line)
+		}
 	}
+	data_mort$mort.status = factor(data_mort$mort.status, 
+								   labels = c('alive', 'deceased'))
+	save(data_mort, file = data_mort_file)
 }
-data_mort$mort.status = factor(data_mort$mort.status, 
-							   labels = c('alive', 'deceased'))
 
 ## Combine the datasets
 df = full_join(data_demo, data_bmx) %>% 
