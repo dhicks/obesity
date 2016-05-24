@@ -58,11 +58,15 @@ for (file in files) {
 				  				   		   		'Some College',
 				  				   		   		'College',
 				  				   		   		NA, 
-				  				   		   		NA), ordered = TRUE),
-				  sample.weight = ifelse(SDDSRVYR != 3, 
-				  					   2/3 * WTMEC4YR,  # 1999-2002
+				  				   		   		NA), ordered = FALSE),
+				  nhanes.cycle = SDDSRVYR,
+				  psu = SDMVPSU,
+				  stratum = SDMVSTRA,
+				  sample.weight = ifelse(SDDSRVYR %in% c(1,2), 
+				  					   2/3 * WTMEC4YR,  # 1999-2000, 2001-2002
 				  					   1/3 * WTMEC2YR	# 2003-2004
-				  					   ))
+				  					   )
+				  )
 	data_demo = rbind(data_demo, readdata)
 }
 data_demo$race.ethnicity = relevel(data_demo$race.ethnicity, 'Non-Hispanic White')
@@ -191,16 +195,12 @@ bmi_classify = function (bmi) {
 }
 
 df$bmi.cat = sapply(df$bmi, bmi_classify) %>% 
-	factor(levels = names(bmi_breaks), ordered = TRUE) %>%
+	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
 df$bmi.max.cat = sapply(df$bmi.max, bmi_classify) %>% 
-	factor(levels = names(bmi_breaks), ordered = TRUE) %>%
+	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
 
-## Filter and drop underweight individuals
-#df = df %>% filter(bmi.cat != 'underweight') %>% droplevels
-
-# 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
 #df %>% filter(bmi.cat > bmi.max.cat) %>% nrow
 # 
