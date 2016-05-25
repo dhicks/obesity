@@ -2,7 +2,12 @@ library(dplyr)
 library(survey)
 library(survival)
 
-load('2016-05-24.Rdata')
+datafile = '2016-05-24.Rdata'
+if (!file.exists(datafile)) {
+	download.file('https://github.com/dhicks/obesity/blob/mwe/2016-05-24.Rdata?raw=true',
+				  datafile)
+}
+load(datafile)
 
 df = df[complete.cases(df),]
 
