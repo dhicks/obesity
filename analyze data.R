@@ -8,6 +8,7 @@ library(survey)
 load('2016-05-24.RData')
 
 ## TODO: df -> dataf
+## TODO: predictions
 
 ## Drop one entry with NA id
 df = df %>% filter(!is.na(id))
@@ -16,16 +17,18 @@ design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.wei
 				   nest = TRUE, 
 				   data = df)
 ## Filtered dataset: nonsmokers, 50-84 years old, not underweight
-design = subset(design, (!smoker) & (age.months >= 50*12) & (age.months < 85*12) 
+design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & (age.months < 85*12) 
 					 & (bmi.cat != 'underweight')
 					 )
 ## Build interaction term
 design = update(design, bmi.cat.inter = interaction(bmi.cat, bmi.max.cat, drop = TRUE))
 
+## TODO: summary statistics
+
 ## ----------
 ## Weighted survival analysis, categorical BMI
 ## Fit the model
-coxfit.cat = svycoxph(Surv(age.months, mort.status == 'deceased') ~ 
+coxfit.cat = svycoxph(Surv(age.years, mort.status == 'deceased') ~ 
 				  			sex + race.ethnicity + education +
 				  			bmi.cat.inter, 
 						   design = design)
@@ -33,7 +36,7 @@ summary(coxfit.cat)
 
 ## Weighted survivial analysis, continuous BMI
 ## Fit the model
-coxfit.cont = svycoxph(Surv(age.months, mort.status == 'deceased') ~
+coxfit.cont = svycoxph(Surv(age.years, mort.status == 'deceased') ~
 					   	sex + race.ethnicity + education + 
 					   	bmi * bmi.max, 
 					   design = design)
@@ -87,14 +90,14 @@ summary(coxfit.cont)
 ## Binomial regression
 ## Categorical BMI
 binomfit.cat = svyglm(mort.status ~ bmi.cat.inter + 
-				   	sex + age.months + race.ethnicity + education, 
+				   	sex + age.years + race.ethnicity + education, 
 				  family = quasibinomial(), 
 				  design = design)
 summary(binomfit.cat)
 
 ## Continuous BMI
 binomfit.cont = svyglm(mort.status ~ bmi * bmi.max + 
-						sex + age.months + race.ethnicity + education, 
+						sex + age.years + race.ethnicity + education, 
 					family = quasibinomial(), 
 					design = design)
 summary(binomfit.cont)
