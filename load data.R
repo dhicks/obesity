@@ -178,7 +178,7 @@ if (file.exists(data_mort_file)) {
 }
 
 ## Combine the datasets
-df = full_join(data_demo, data_bmx) %>% 
+dataf = full_join(data_demo, data_bmx) %>% 
 	full_join(data_smq) %>%
 	full_join(data_whq) %>%
 	## Calculate maximum BMI
@@ -194,29 +194,29 @@ bmi_classify = function (bmi) {
 	return(names(which(bmi < bmi_breaks))[1])
 }
 
-df$bmi.cat = sapply(df$bmi, bmi_classify) %>% 
+dataf$bmi.cat = sapply(dataf$bmi, bmi_classify) %>% 
 	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
-df$bmi.max.cat = sapply(df$bmi.max, bmi_classify) %>% 
+dataf$bmi.max.cat = sapply(dataf$bmi.max, bmi_classify) %>% 
 	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
-#df %>% filter(bmi.cat > bmi.max.cat) %>% nrow
+#dataf %>% filter(bmi.cat > bmi.max.cat) %>% nrow
 # 
 # ## Plots of BMI against maximum BMI
-# ggplot(data = df, aes(x = bmi, y = bmi.max)) + geom_point()
-# ggplot(data = {df %>% group_by(bmi.cat, bmi.max.cat) %>% summarize(n = n())},
+# ggplot(data = dataf, aes(x = bmi, y = bmi.max)) + geom_point()
+# ggplot(data = {dataf %>% group_by(bmi.cat, bmi.max.cat) %>% summarize(n = n())},
 # 	   aes(x = bmi.cat, y = bmi.max.cat, fill = n)) + geom_tile()
-# ## ECDF of difference
-#ggplot(data = df, aes(bmi.max - bmi, color = bmi.cat)) + stat_ecdf() + xlim(0, 20)
+# ## ECdataf of difference
+#ggplot(data = dataf, aes(bmi.max - bmi, color = bmi.cat)) + stat_ecdataf() + xlim(0, 20)
 # 
 # ## Histograms
-# bmi_hist = ggplot(data = df, aes(x = bmi, fill = race.ethnicity)) +
+# bmi_hist = ggplot(data = dataf, aes(x = bmi, fill = race.ethnicity)) +
 # 	geom_histogram(bins = 100) +
 # 	geom_vline(xintercept = bmi_breaks) +
 # 	scale_fill_brewer(palette = 'Set1', guide = FALSE)
-# bmi_cat_hist = ggplot(data = df, aes(x = bmi.cat, fill = race.ethnicity)) +
+# bmi_cat_hist = ggplot(data = dataf, aes(x = bmi.cat, fill = race.ethnicity)) +
 # 	geom_bar() +
 # 	scale_fill_brewer(palette = 'Set1')
 # plot_grid(bmi_hist, bmi_cat_hist, labels = 'AUTO', rel_widths = c(1, 1.2))
