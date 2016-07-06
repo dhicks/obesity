@@ -6,6 +6,9 @@ load('2016-06-08.RData')
 
 ## TODO: predictions
 
+bmi_breaks = c(18.5, 25, 30, 35, Inf)
+names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
+
 ## Drop one entry with NA id
 dataf = dataf %>% filter(!is.na(id))
 ## Move to a survey design object
@@ -29,6 +32,25 @@ coxfit.cat = svycoxph(Surv(age.years, mort.status == 'deceased') ~
 				  			bmi.cat.inter, 
 						   design = design)
 summary(coxfit.cat)
+## Make predictions
+coxfit.cat.pred = predict(coxfit.cat, design$variables, type = 'risk', se.fit = TRUE)
+design = update(design, coxfit.cat.fit = coxfit.cat.pred$fit,
+				coxfit.cat.se = coxfit.cat.pred$se.fit)
+## Plot predictions
+ggplot(data = design$variables, aes(bmi, coxfit.cat.fit, color = sex, fill = sex)) + 
+	#geom_ribbon(aes(ymin = coxfit.cont.fit - 2*coxfit.cont.se, ymax = coxfit.cont.fit + 2*coxfit.cont.se), alpha = .25) +
+	geom_segment(aes(x = bmi, xend = bmi, 
+					 y = coxfit.cat.fit + qnorm(.025) * coxfit.cat.se, 
+					 yend = coxfit.cat.fit + qnorm(.975) * coxfit.cat.se), 
+				 alpha = .5) +
+	#geom_point(alpha = .25) + 
+	geom_vline(xintercept = bmi_breaks, color = 'grey') +
+	geom_hline(yintercept = 1) +
+	facet_grid(race.ethnicity ~ bmi.max.cat) + 
+	ylab('proportional hazard') + 
+	coord_cartesian(xlim = c(18.5, 50), ylim = c(0, 4))
+
+## TODO: plot
 
 ## Weighted survivial analysis, continuous BMI
 ## Fit the model
@@ -37,6 +59,25 @@ coxfit.cont = svycoxph(Surv(age.years, mort.status == 'deceased') ~
 					   	bmi * bmi.max, 
 					   design = design)
 summary(coxfit.cont)
+## Make predictions
+coxfit.cont.pred = predict(coxfit.cont, design$variables, type = 'risk', se.fit = TRUE)
+design = update(design, coxfit.cont.fit = coxfit.cont.pred$fit, 
+				coxfit.cont.se = coxfit.cont.pred$se.fit)
+## Plot predictions
+ggplot(data = design$variables, aes(bmi, coxfit.cont.fit, color = sex, fill = sex)) + 
+	#geom_ribbon(aes(ymin = coxfit.cont.fit - 2*coxfit.cont.se, ymax = coxfit.cont.fit + 2*coxfit.cont.se), alpha = .25) +
+	geom_segment(aes(x = bmi, xend = bmi, 
+					 y = coxfit.cont.fit + qnorm(.025) * coxfit.cont.se, 
+					 yend = coxfit.cont.fit + qnorm(.975) * coxfit.cont.se), 
+				 alpha = .5) +
+	#geom_point(alpha = .25) + 
+	geom_vline(xintercept = bmi_breaks, color = 'grey') +
+	geom_hline(yintercept = 1) +
+	facet_wrap( ~ race.ethnicity) + 
+	ylab('proportional hazard') + 
+	coord_cartesian(xlim = c(18.5, 50), ylim = c(0, 4))
+
+
 
 # ## ----------
 # ## Unweighted survival analysis
