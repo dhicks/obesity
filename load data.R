@@ -7,6 +7,10 @@ library(lubridate)
 
 ## TODO: https://cran.r-project.org/web/packages/nhanesA/vignettes/Introducing_nhanesA.html
 
+## TODO: because NHANES only reports exam dates within 6-month periods, 
+##    the date of mortality followups has ±3 months of uncertainty; 
+##    check the effect of different date cutoffs
+
 suffixes = c('', '_B', '_C')
 
 ## Demographic Variables & Sample Weights
