@@ -1,21 +1,17 @@
-#source('load data.R')
-
 library(cowplot)
 library(dplyr)
 library(mgcv)
-#library(survival)
 library(survey)
-load('2016-05-24.RData')
+load('2016-06-08.RData')
 
-## TODO: df -> dataf
 ## TODO: predictions
 
 ## Drop one entry with NA id
-df = df %>% filter(!is.na(id))
+dataf = dataf %>% filter(!is.na(id))
 ## Move to a survey design object
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
 				   nest = TRUE, 
-				   data = df)
+				   data = dataf)
 ## Filtered dataset: nonsmokers, 50-84 years old, not underweight
 design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & (age.months < 85*12) 
 					 & (bmi.cat != 'underweight')
@@ -45,10 +41,10 @@ summary(coxfit.cont)
 # ## ----------
 # ## Unweighted survival analysis
 # ## Define the survival object
-# survobj = with(df, Surv(age.months, mort.status == 'deceased'))
+# survobj = with(dataf, Surv(age.months, mort.status == 'deceased'))
 # ## Curves by BMI category at examination
-# # fit = survfit(survobj~bmi.cat, data = df)
-# # survdiff(survobj~bmi.cat, data = df)
+# # fit = survfit(survobj~bmi.cat, data = dataf)
+# # survdiff(survobj~bmi.cat, data = dataf)
 # 
 # ## Cox proportional hazards models
 # ## Set this option to get desired behavior w/ ordered factors
@@ -56,18 +52,18 @@ summary(coxfit.cont)
 # ## Breaking BMI and max BMI into categories
 # coxfit.cat = coxph(survobj ~ sex + race.ethnicity + education +
 # 				   bmi.cat + bmi.max.cat,
-# 				   data = df)
+# 				   data = dataf)
 # summary(coxfit.cat)
 # ## Continuous BMI and max BMI
 # coxfit.cont = coxph(survobj ~ sex + race.ethnicity + education + 
 # 						bmi + bmi.max, 
-# 					data = df)
+# 					data = dataf)
 # summary(coxfit.cont)
 
 
 ## ----------
 ## LOESS
-# ggplot(data = df, aes(x = bmi, y = as.numeric(mort.status) - 1,
+# ggplot(data = dataf, aes(x = bmi, y = as.numeric(mort.status) - 1,
 # 					  color = race.ethnicity,
 # 					  shape = sex, linetype = sex)) +
 # 	geom_point(position = position_jitter(height = .25), alpha = .1) +
@@ -84,7 +80,7 @@ summary(coxfit.cont)
 
 # gamfit = gam(mort.status ~ bmi.cat * bmi.max.cat + 
 # 			 	sex + age.months + race.ethnicity + education, 
-# 			 data = df)
+# 			 data = dataf)
 
 ## ----------
 ## Binomial regression
