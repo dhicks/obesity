@@ -1,8 +1,11 @@
 #library(cowplot)
 library(dplyr)
 library(foreign)
+library(lubridate)
 
 ## TODO: load NHANES III data
+
+## TODO: https://cran.r-project.org/web/packages/nhanesA/vignettes/Introducing_nhanesA.html
 
 suffixes = c('', '_B', '_C')
 
@@ -30,6 +33,9 @@ suffixes = c('', '_B', '_C')
 ##	5:	College Graduate or Above
 ##	7:	Refused
 ##	9:	Don't Know
+## RIDEXMON: Six month time period when examination was performed
+##	1:	November 1 through April 30
+##	2:	May 1 through October 31
 ## SDDSRVYR:Data Release Number
 ##	1:	1999-2000
 ##	2:	2001-2002
@@ -37,7 +43,8 @@ suffixes = c('', '_B', '_C')
 ## WTMEC4YR:4-Year Sample Weights
 ## WTMEC2YR:2-Year Sample Weights
 files = paste('NHANES/DEMO', suffixes, '.XPT', sep = '')
-data_demo = data.frame(id = c(), sex = c(), age.months = c(), race.ethnicity = c())
+data_demo = data.frame(id = c(), sex = c(), age.months = c(), race.ethnicity = c(), 
+					   exam.6mo = c())
 for (file in files) {
 	readdata = read.xport(file)
 	readdata = readdata %>%
@@ -59,6 +66,7 @@ for (file in files) {
 				  				   		   		'College',
 				  				   		   		NA, 
 				  				   		   		NA), ordered = FALSE),
+				  exam.6mo = RIDEXMON,
 				  nhanes.cycle = SDDSRVYR,
 				  psu = SDMVPSU,
 				  stratum = SDMVSTRA,
@@ -71,6 +79,11 @@ for (file in files) {
 }
 data_demo$race.ethnicity = relevel(data_demo$race.ethnicity, 'Non-Hispanic White')
 data_demo$education = C(data_demo$education, treatment, base = 3)
+## "Exam dates" are only providing within 6-month periods; 
+##   estimate the date using the middle of these periods
+data_demo$exam.date.est = 
+	ymd(paste(2 * data_demo$nhanes.cycle + 1998, '-02-01', sep = '')) +
+		months(ifelse(data_demo$exam.6mo == 2, 6, 0))
 
 
 ## Smoking Data
@@ -146,13 +159,13 @@ for (file in files) {
 
 ## Public-use Linked Mortality Files
 ## http://www.cdc.gov/nchs/data_access/data_linkage/mortality/data_files_data_dictionaries.htm
-##	NB Stokes 2014 use the 2006 edition; I was only able to find the 2011 edition
 ## Variables of interest:  
 ## Col. 1-5: 	NHANES Respondent Sequence Number
 ## Col. 16:		Final Morality Status
 ##	0: Assumed alive
 ##	1: Assumed decreased
 ##  Blank: Ineligible or under age 18
+## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
 data_mort_file = 'data_mort.Rdata'
 if (file.exists(data_mort_file)) {
 	## The parsing code in the other branch is slow, so we save parsed data
@@ -160,16 +173,20 @@ if (file.exists(data_mort_file)) {
 } else {
 	files = paste('mortality/NHANES_', c('1999_2000', '2001_2002', '2003_2004'), 
 				  '_MORT_2011_PUBLIC.dat', sep = '')
-	data_mort = data.frame(id = numeric(), mort.status = numeric())
+	data_mort = data.frame(id = numeric(), mort.status = numeric(), 
+						   followup.m = numeric())
 	for (file in files) {
 		unparsed = readLines(file)
 		unparsed = strsplit(unparsed, '\n')
 		for (entry in unparsed) {
 			this_id = substr(entry, 1, 5)
 			this_mort_status = substr(entry, 16, 16)
+			this_followup = substr(entry, 47, 49)
 			new_line = data.frame(id = as.numeric(this_id), 
-								  mort.status = as.numeric(this_mort_status))
+								  mort.status = as.numeric(this_mort_status), 
+								  followup.m = as.numeric(this_followup))
 			data_mort = rbind(data_mort, new_line)
+			#print(new_line)
 		}
 	}
 	data_mort$mort.status = factor(data_mort$mort.status, 
@@ -184,7 +201,9 @@ dataf = full_join(data_demo, data_bmx) %>%
 	## Calculate maximum BMI
 	##  NB If observed BMI is greater than recalled, use observed BMI
 	mutate(bmi.max = pmax(weight.max / (height/100)**2, bmi)) %>%
-	full_join(data_mort)
+	full_join(data_mort) %>%
+	## Calculate estimated date of mortality followup
+	mutate(mort.followup.date.est = exam.date.est + months(followup.m))
 
 ## Define BMI categories
 bmi_breaks = c(18.5, 25, 30, 35, Inf)
@@ -200,6 +219,8 @@ dataf$bmi.cat = sapply(dataf$bmi, bmi_classify) %>%
 dataf$bmi.max.cat = sapply(dataf$bmi.max, bmi_classify) %>% 
 	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
+
+save(dataf, file = paste(Sys.Date(), '.Rdata', sep = ''))
 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
 #dataf %>% filter(bmi.cat > bmi.max.cat) %>% nrow

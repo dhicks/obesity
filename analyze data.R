@@ -2,7 +2,7 @@ library(cowplot)
 library(dplyr)
 library(mgcv)
 library(survey)
-load('2016-06-08.RData')
+load('2016-07-06.RData')
 
 ## TODO: predictions
 
@@ -15,10 +15,13 @@ dataf = dataf %>% filter(!is.na(id))
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
 				   nest = TRUE, 
 				   data = dataf)
-## Filtered dataset: nonsmokers, 50-84 years old, not underweight
-design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & (age.months < 85*12) 
-					 & (bmi.cat != 'underweight')
-					 )
+## Filtered dataset: nonsmokers, 50-84 years old, not underweight, 
+##   mortality followup as of December 31, 2006
+design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
+					(age.months < 85*12) & 
+					(bmi.cat != 'underweight') & 
+					(mort.followup.date.est <= '2006-12-31')
+				)
 ## Build interaction term
 design = update(design, bmi.cat.inter = interaction(bmi.cat, bmi.max.cat, drop = TRUE))
 
