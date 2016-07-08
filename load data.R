@@ -167,16 +167,28 @@ for (file in files) {
 ## Col. 1-5: 	NHANES Respondent Sequence Number
 ## Col. 16:		Final Morality Status
 ##	0: Assumed alive
-##	1: Assumed decreased
+##	1: Assumed deceased
 ##  Blank: Ineligible or under age 18
 ## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
+## 
+## In the legacy data file:
+## Variables of interest:
+## Col. 1-5:	NHANES Respondent Sequence Number
+## Col. 7: 		Final Mortality Status
+
 data_mort_file = 'data_mort.Rdata'
 if (file.exists(data_mort_file)) {
 	## The parsing code in the other branch is slow, so we save parsed data
 	load(data_mort_file)
 } else {
-	files = paste('mortality/NHANES_', c('1999_2000', '2001_2002', '2003_2004'), 
-				  '_MORT_2011_PUBLIC.dat', sep = '')
+	## For the most recent data release
+	# files = paste('mortality/NHANES_', 
+	# 			  c('1999_2000', '2001_2002', '2003_2004'), 
+	# 			  '_MORT_2010_PUBLIC.dat', sep = '')
+	## For the legacy data release
+	files = paste('mortality 2006/NHANES',
+				  c('99_00', '01_02', '03_04'),
+				  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
 	data_mort = data.frame(id = numeric(), mort.status = numeric(), 
 						   followup.m = numeric())
 	for (file in files) {
@@ -184,8 +196,14 @@ if (file.exists(data_mort_file)) {
 		unparsed = strsplit(unparsed, '\n')
 		for (entry in unparsed) {
 			this_id = substr(entry, 1, 5)
-			this_mort_status = substr(entry, 16, 16)
-			this_followup = substr(entry, 47, 49)
+			## In the current release
+			#this_mort_status = substr(entry, 16, 16)
+			## In the legacy data
+			this_mort_status = substr(entry, 7, 7)
+			## In the current release
+			#this_followup = substr(entry, 47, 49)
+			## In the legacy data
+			this_followup = substr(entry, 13, 15)
 			new_line = data.frame(id = as.numeric(this_id), 
 								  mort.status = as.numeric(this_mort_status), 
 								  followup.m = as.numeric(this_followup))
