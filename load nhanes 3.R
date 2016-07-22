@@ -1,4 +1,5 @@
 library(dplyr)
+library(readr)
 
 "
 Variables of interest in `adult.dat`
@@ -32,60 +33,41 @@ Variables of interest in `adult.dat`
 	8: Blank but applicable
 "
 
-data_adult = data.frame(id = c(), sex = c(), age.months = c(), 
-						race.ethnicity = c(), 
-						education.yrs = c(),
-						psu = c(),
-						stratum = c(),
-						sample.weight = c(),
-						weight.max = c(), 
-						cigarettes = c(), 
-						pipe = c(), 
-						cigars = c(), 
-						chew = c())
-unparsed = readLines('NHANES III/adult.dat')
-unparsed = strsplit(unparsed, '\n')
-paste(length(unparsed), 'entries in adult.dat')
-for (entry in unparsed) {
-	print(nrow(data_adult))
-	this_id = substr(entry, 1, 5)
-	this_sex = substr(entry, 15, 15)
-	this_age = substr(entry, 1237, 1240)
-	this_race.ethnicity = substr(entry, 12, 12)
-	this_education = substr(entry, 1256, 1257)
-	this_psu = substr(entry, 43, 43)
-	this_stratum = substr(entry, 44, 45)
-	this_sample.weight = substr(entry, 61, 69)
-	this_weight.max = substr(entry, 1961, 1963)
-	this_cigarettes = substr(entry, 2281, 2281)
-	this_pipe = substr(entry, 2334, 2334)
-	this_cigars = substr(entry, 2330, 2330)
-	this_chew = substr(entry, 2311, 2311)
-	new_line = data.frame(id = this_id, sex = this_sex, 
-						  age.months = this_age, 
-						  race.ethnicity = this_race.ethnicity, 
-						  education.yrs = this_education, 
-						  psu = this_psu, 
-						  stratum = this_stratum,
-						  sample.weight = this_sample.weight, 
-						  weight.max = this_weight.max, 
-						  cigarettes = this_cigarettes, 
-						  pipe = this_pipe, 
-						  cigars = this_cigars, 
-						  chew = this_chew)
-	data_adult = rbind(data_adult, new_line)
-}
-data_adult$id = as.numeric(as.character(data_adult$id))
-data_adult$sex = factor(as.numeric(data_adult$sex), 
-						labels = c('male', 'female'))
-data_adult$age.months = as.numeric(as.character(data_adult$age.months))
-data_adult$race.ethnicity = factor(as.numeric(data_adult$race.ethnicity), 
-									  labels = c('Non-Hispanic White',
-									  			'Non-Hispanic Black',
-									  			'Mexican-American',
-									  			'Other'))
+system.time({
+	data_adult = read_fwf('NHANES III/adult.dat', n_max = -1, 
+						  fwf_positions(c(1, 15, 1237, 12, 1256, 1961, 
+						  					2281, 2334, 2330, 2311, 43, 44, 
+						  					61, 1000), 
+						  				c(5, 15, 1240, 12, 1257, 1963, 
+						  				  	2281, 2334, 2330, 2311, 43, 45, 
+						  				  	69, 1000), 
+						  				col_names = 
+						  					c('id', 'sex', 'age.months', 
+						  					  'race.ethnicity', 
+						  					  'education.yrs', 
+						  					  'weight.max', 
+						  					  'cigarettes', 'pipe', 
+						  					  'cigars', 'chew', 
+						  					  'psu', 'stratum', 'sample.weight', 
+						  					  'dummy'))) %>%
+		transmute(id = as.numeric(id), 
+				  sex = factor(sex, labels = c('male', 'female')),
+				  age.months = as.numeric(age.months), 
+				  race.ethnicity = factor(race.ethnicity, 
+				  						labels = c('Non-Hispanic White', 
+				  								   'Non-Hispanic Black', 
+				  								   'Mexican-American', 
+				  								   'Other')),
+				  education.yrs = as.numeric(education.yrs),
+				  weight.max = as.numeric(weight.max),
+				  cigarettes = cigarettes, pipe = pipe, 
+				  cigars = cigars, chew = chew,
+				  psu = factor(paste('iii', psu)), 
+				  stratum = factor(paste('iii ', stratum)), 
+				  sample.weight = as.numeric(sample.weight))
+})
+
 code_ed.yrs = function (ed.yrs) {
-	ed.yrs = as.numeric(as.character(ed.yrs))
 	if (ed.yrs == '88' | ed.yrs == '99' | is.na(ed.yrs)) {
 		return(NA)
 	} else if (ed.yrs < 9) {
@@ -101,10 +83,6 @@ code_ed.yrs = function (ed.yrs) {
 	}
 }
 data_adult$education = sapply(data_adult$education.yrs, code_ed.yrs)
-data_adult$psu = factor(paste('iii', data_adult$psu))
-data_adult$stratum = factor(paste('iii', data_adult$stratum))
-
-data_adult$sample.weight = as.numeric(as.character(data_adult$sample.weight))
 catch_error_values = function (x) {
 	if (x == 888 | x == 999 | is.na(x)) {
 		return(NA)
@@ -112,7 +90,6 @@ catch_error_values = function (x) {
 		return(x)
 	}
 }
-data_adult$weight.max = as.numeric(as.character(data_adult$weight.max))
 data_adult$weight.max = sapply(data_adult$weight.max, catch_error_values) 
 data_adult$weight.max = data_adult$weight.max * .454
 
@@ -133,7 +110,7 @@ data_adult$pipe = sapply(data_adult$pipe, code_tobacco)
 data_adult$cigars = sapply(data_adult$cigars, code_tobacco)
 data_adult$chew = sapply(data_adult$chew, code_tobacco)
 data_adult$smoker = data_adult$cigarettes | data_adult$pipe | data_adult$cigars | data_adult$chew
-
+data_adult = data_adult %>% select(-c(cigarettes, pipe, cigars, chew))
 
 
 "
@@ -144,29 +121,42 @@ Variables of interest in `exam.dat`
 1524-7:BMPBMI, Body mass index
 "
 
-data_exam = data.frame(id = c(), 
-					   weight = c(), height = c(), bmi = c())
-unparsed = readLines('NHANES III/exam.dat')
-unparsed = strsplit(unparsed, '\n')
-paste(length(unparsed), 'entries in exam.dat')
-for (entry in unparsed) {
-	print(nrow(data_exam))
-	this_id = substr(entry, 1, 5)
-	this_weight = substr(entry, 1508, 1513)
-	this_height = substr(entry, 1528, 1532)
-	this_bmi = substr(entry, 1524, 1527)
-	
-	new_line = data.frame(id = this_id, weight = this_weight, 
-						  height = this_height, bmi = this_bmi)
-	data_exam = rbind(data_exam, new_line)
+system.time({
+	data_exam = read_fwf('NHANES III/exam.dat', 
+						 fwf_positions(c(1, 1508, 1528, 1524, 1533), 
+						 			  c(5,  1513, 1532, 1527, 1533), 
+						 	col_names = c('id', 'weight', 'height', 'bmi', 'dummy')),
+						 n_max = -1) %>%
+		transmute(id = as.numeric(id), 
+				  weight = as.numeric(weight), 
+				  height = as.numeric(height), 
+				  bmi = as.numeric(bmi))
+})
+catch_errors_weight = function (x) {
+	if (x == 888888 | is.na(x)) {
+		return(NA)
+	} else {
+		return(x)
+	}
 }
-data_exam$id = as.numeric(as.character(data_exam$id))
+data_exam$weight = sapply(data_exam$weight, catch_errors_weight)
+catch_errors_height = function (x) {
+	if (x == 88888 | is.na(x)) {
+		return(NA)
+	} else {
+		return(x)
+	}
+}
+data_exam$height = sapply(data_exam$height, catch_errors_height)
+catch_errors_bmi = function (x) {
+	if (x == 8888 | is.na(x)) {
+		return(NA)
+	} else {
+		return(x)
+	}
+}
+data_exam$bmi = sapply(data_exam$bmi, catch_errors_bmi)
 
-data_exam$weight = as.numeric(as.character(data_exam$weight))
-data_exam$weight = sapply(data_exam$weight, catch_error_values)
-data_exam$height = as.numeric(as.character(data_exam$height))
-data_exam$height = sapply(data_exam$height, catch_error_values)
-data_exam$bmi = as.numeric(as.character(data_exam$bmi))
 
 
 ## Public-use Linked Mortality Files
@@ -184,46 +174,14 @@ data_exam$bmi = as.numeric(as.character(data_exam$bmi))
 ## Col. 1-5:	NHANES Respondent Sequence Number
 ## Col. 7: 		Final Mortality Status
 
-data_mort_file = 'data_mort_III.Rdata'
-if (file.exists(data_mort_file)) {
-	## The parsing code in the other branch is slow, so we save parsed data
-	load(data_mort_file)
-} else {
-	## For the most recent data release
-	files = 'mortality/NHANES_III_MORT_2011_PUBLIC.dat'
-	## For the legacy data release
-	# files = paste('mortality 2006/NHANES',
-	# 			  c('99_00', '01_02', '03_04'),
-	# 			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
-	data_mort = data.frame(id = numeric(), mort.status = numeric(), 
-						   followup.m = numeric())
-	for (file in files) {
-		unparsed = readLines(file)
-		unparsed = strsplit(unparsed, '\n')
-		print(paste(length(unparsed), 'entries in mortality data'))
-		for (entry in unparsed) {
-			print(nrow(data_mort))
-			this_id = substr(entry, 1, 5)
-			## In the current release
-			this_mort_status = substr(entry, 16, 16)
-			## In the legacy data
-			#this_mort_status = substr(entry, 7, 7)
-			## In the current release
-			this_followup = substr(entry, 47, 49)
-			## In the legacy data
-			#this_followup = substr(entry, 13, 15)
-			new_line = data.frame(id = as.numeric(this_id), 
-								  mort.status = as.numeric(this_mort_status), 
-								  followup.m = as.numeric(this_followup))
-			data_mort = rbind(data_mort, new_line)
-			#print(new_line)
-		}
-	}
-	data_mort$mort.status = factor(data_mort$mort.status, 
-								   labels = c('alive', 'deceased'))
-	save(data_mort, file = data_mort_file)
-}
-
+system.time({
+	data_mort = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.dat', 
+						 fwf_positions(c(1, 16, 17), c(5, 16, 17), 
+						 			  col_names = c('id', 'mort.status', 'dummy')),
+						 n_max = -1) %>%
+		transmute(id = as.numeric(id), 
+				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+})
 
 dataf = inner_join(data_adult, data_exam) %>%
 	left_join(data_mort) %>%
