@@ -53,6 +53,7 @@ system.time({
 		transmute(id = as.numeric(id), 
 				  sex = factor(sex, labels = c('male', 'female')),
 				  age.months = as.numeric(age.months), 
+				  age.years = age.months %/% 12,
 				  race.ethnicity = factor(race.ethnicity, 
 				  						labels = c('Non-Hispanic White', 
 				  								   'Non-Hispanic Black', 
@@ -62,6 +63,7 @@ system.time({
 				  weight.max = as.numeric(weight.max),
 				  cigarettes = cigarettes, pipe = pipe, 
 				  cigars = cigars, chew = chew,
+				  nhanes.cycle = 0,
 				  psu = factor(paste('iii', psu)), 
 				  stratum = factor(paste('iii ', stratum)), 
 				  sample.weight = as.numeric(sample.weight))
@@ -110,7 +112,8 @@ data_adult$pipe = sapply(data_adult$pipe, code_tobacco)
 data_adult$cigars = sapply(data_adult$cigars, code_tobacco)
 data_adult$chew = sapply(data_adult$chew, code_tobacco)
 data_adult$smoker = data_adult$cigarettes | data_adult$pipe | data_adult$cigars | data_adult$chew
-data_adult = data_adult %>% select(-c(cigarettes, pipe, cigars, chew))
+
+data_adult = data_adult %>% select(-c(education.yrs, cigarettes, pipe, cigars, chew))
 
 
 "
@@ -176,16 +179,16 @@ data_exam$bmi = sapply(data_exam$bmi, catch_errors_bmi)
 
 system.time({
 	data_mort = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.dat', 
-						 fwf_positions(c(1, 16, 17), c(5, 16, 17), 
+						 fwf_positions(c(1, 16, 17), 
+						 			   c(5, 16, 17), 
 						 			  col_names = c('id', 'mort.status', 'dummy')),
 						 n_max = -1) %>%
 		transmute(id = as.numeric(id), 
 				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
 })
 
-dataf = inner_join(data_adult, data_exam) %>%
-	left_join(data_mort) %>%
+dataf_iii = left_join(data_adult, data_exam) %>%
+	left_join(data_mort) %>% 
 	mutate(bmi.max = pmax(weight.max / (height/100)**2, bmi))
 
-#TODO: combine with continuous NHANES
 

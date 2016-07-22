@@ -1,9 +1,10 @@
 #library(cowplot)
 library(dplyr)
 library(foreign)
+library(readr)
 library(lubridate)
 
-## TODO: load NHANES III data
+source('load nhanes 3.R')
 
 ## TODO: https://cran.r-project.org/web/packages/nhanesA/vignettes/Introducing_nhanesA.html
 
@@ -66,7 +67,6 @@ for (file in files) {
 				  				   		   		'College',
 				  				   		   		NA, 
 				  				   		   		NA), ordered = FALSE),
-				  exam.6mo = RIDEXMON,
 				  nhanes.cycle = SDDSRVYR,
 				  psu = SDMVPSU,
 				  stratum = SDMVSTRA,
@@ -79,11 +79,6 @@ for (file in files) {
 }
 data_demo$race.ethnicity = relevel(data_demo$race.ethnicity, 'Non-Hispanic White')
 data_demo$education = C(data_demo$education, treatment, base = 3)
-## "Exam dates" are only providing within 6-month periods; 
-##   estimate the date using the middle of these periods
-data_demo$exam.date.est = 
-	ymd(paste(2 * data_demo$nhanes.cycle + 1998, '-02-01', sep = '')) +
-		months(ifelse(data_demo$exam.6mo == 2, 6, 0))
 
 
 ## Smoking Data
@@ -172,45 +167,37 @@ for (file in files) {
 ## Col. 1-5:	NHANES Respondent Sequence Number
 ## Col. 7: 		Final Mortality Status
 
-data_mort_file = 'data_mort.Rdata'
-if (file.exists(data_mort_file)) {
-	## The parsing code in the other branch is slow, so we save parsed data
-	load(data_mort_file)
-} else {
-	## For the most recent data release
-	# files = paste('mortality/NHANES_', 
-	# 			  c('1999_2000', '2001_2002', '2003_2004'), 
-	# 			  '_MORT_2010_PUBLIC.dat', sep = '')
-	## For the legacy data release
-	files = paste('mortality 2006/NHANES',
-				  c('99_00', '01_02', '03_04'),
-				  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
-	data_mort = data.frame(id = numeric(), mort.status = numeric(), 
-						   followup.m = numeric())
-	for (file in files) {
-		unparsed = readLines(file)
-		unparsed = strsplit(unparsed, '\n')
-		for (entry in unparsed) {
-			this_id = substr(entry, 1, 5)
-			## In the current release
-			#this_mort_status = substr(entry, 16, 16)
-			## In the legacy data
-			this_mort_status = substr(entry, 7, 7)
-			## In the current release
-			#this_followup = substr(entry, 47, 49)
-			## In the legacy data
-			this_followup = substr(entry, 13, 15)
-			new_line = data.frame(id = as.numeric(this_id), 
-								  mort.status = as.numeric(this_mort_status), 
-								  followup.m = as.numeric(this_followup))
-			data_mort = rbind(data_mort, new_line)
-			#print(new_line)
-		}
-	}
-	data_mort$mort.status = factor(data_mort$mort.status, 
-								   labels = c('alive', 'deceased'))
-	save(data_mort, file = data_mort_file)
+## For the legacy data release
+# files = paste('mortality 2006/NHANES',
+# 			  c('99_00', '01_02', '03_04'),
+# 			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
+# for (file in files) {
+# 	data_mort_temp = read_fwf(file,  n_max = -1,
+# 							  fwf_positions(c(1, 7, 17), 
+# 							  			    c(5, 7, 17), 
+# 							  			  col_names = c('id', 'mort.status', 'dummy'))
+# 	) %>%
+# 		transmute(id = as.numeric(id), 
+# 				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+# 	data_mort = rbind(data_mort, data_mort_temp)
+# }
+
+## For the most recent data release
+files = paste('mortality/NHANES_',
+			  c('1999_2000', '2001_2002', '2003_2004'),
+			  '_MORT_2011_PUBLIC.dat', sep = '')
+data_mort = data.frame(id = c(), mort.status = c())
+for (file in files) {
+	data_mort_temp = read_fwf(file,  n_max = -1,
+			 fwf_positions(c(1, 16, 17),
+			 			   c(5, 16, 17),
+			 			  col_names = c('id', 'mort.status', 'dummy'))
+			) %>%
+	transmute(id = as.numeric(id),
+			  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+	data_mort = rbind(data_mort, data_mort_temp)
 }
+
 
 ## Combine the datasets
 dataf = full_join(data_demo, data_bmx) %>% 
@@ -219,9 +206,8 @@ dataf = full_join(data_demo, data_bmx) %>%
 	## Calculate maximum BMI
 	##  NB If observed BMI is greater than recalled, use observed BMI
 	mutate(bmi.max = pmax(weight.max / (height/100)**2, bmi)) %>%
-	full_join(data_mort) %>%
-	## Calculate estimated date of mortality followup
-	mutate(mort.followup.date.est = exam.date.est + months(followup.m))
+	left_join(data_mort)
+dataf = rbind(dataf, dataf_iii)
 
 ## Define BMI categories
 bmi_breaks = c(18.5, 25, 30, 35, Inf)
@@ -238,7 +224,7 @@ dataf$bmi.max.cat = sapply(dataf$bmi.max, bmi_classify) %>%
 	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
 
-save(dataf, file = paste(Sys.Date(), '.Rdata', sep = ''))
+save(dataf, bmi_breaks, file = paste(Sys.Date(), '.Rdata', sep = ''))
 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
 #dataf %>% filter(bmi.cat > bmi.max.cat) %>% nrow

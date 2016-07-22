@@ -2,15 +2,17 @@ library(cowplot)
 library(dplyr)
 library(mgcv)
 library(survey)
-load('2016-07-06.RData')
+load('2016-07-22.RData')
 
-## TODO: predictions
-
-bmi_breaks = c(18.5, 25, 30, 35, Inf)
-names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
+# bmi_breaks = c(18.5, 25, 30, 35, Inf)
+# names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
 
 ## Drop one entry with NA id
 dataf = dataf %>% filter(!is.na(id))
+dataf_subset = subset(dataf, (!smoker) & (age.months >= 50*12) & 
+					  	(age.months < 85*12) & 
+					  	(bmi.cat != 'underweight') &
+					  	!is.na(bmi) & !is.na(education) & !is.na(mort.status))
 ## Move to a survey design object
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
 				   nest = TRUE, 
@@ -19,9 +21,8 @@ design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.wei
 ##   mortality followup as of December 31, 2006
 design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
 					(age.months < 85*12) & 
-					(bmi.cat != 'underweight') & 
-					(mort.followup.date.est <= '2006-12-31')
-				)
+					(bmi.cat != 'underweight') &
+					!is.na(bmi) & !is.na(education) & !is.na(mort.status))
 ## Build interaction term
 design = update(design, bmi.cat.inter = interaction(bmi.cat, bmi.max.cat, drop = TRUE))
 
