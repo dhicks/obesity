@@ -44,8 +44,7 @@ suffixes = c('', '_B', '_C')
 ## WTMEC4YR:4-Year Sample Weights
 ## WTMEC2YR:2-Year Sample Weights
 files = paste('NHANES/DEMO', suffixes, '.XPT', sep = '')
-data_demo = data.frame(id = c(), sex = c(), age.months = c(), race.ethnicity = c(), 
-					   exam.6mo = c())
+data_demo = data.frame(id = c(), sex = c(), age.months = c(), race.ethnicity = c())
 for (file in files) {
 	readdata = read.xport(file)
 	readdata = readdata %>%
@@ -70,11 +69,17 @@ for (file in files) {
 				  nhanes.cycle = SDDSRVYR,
 				  psu = SDMVPSU,
 				  stratum = SDMVSTRA,
+				  ## Combined sample weight instructions here:  
+				  ##  https://www.cdc.gov/nchs/tutorials/NHANES/SurveyDesign/Weighting/Task2.htm
+				  ##  Search in page for "6 years of data from 1999-2004"
+				  #WTMEC4YR = WTMEC4YR, 
+				  #WTMEC2YR = WTMEC2YR,
 				  sample.weight = ifelse(SDDSRVYR %in% c(1,2), 
-				  					   2/3 * WTMEC4YR,  # 1999-2000, 2001-2002
-				  					   1/3 * WTMEC2YR	# 2003-2004
-				  					   )
-				  )
+						  		  	2/3 * WTMEC4YR, 
+						  		  ifelse(SDDSRVYR %in% c(3), 
+						  		  	1/3 * WTMEC2YR, 
+						  		  NA))
+		)
 	data_demo = rbind(data_demo, readdata)
 }
 data_demo$race.ethnicity = relevel(data_demo$race.ethnicity, 'Non-Hispanic White')
@@ -109,7 +114,8 @@ for (file in files) {
 				  					(pipe == 1) | 
 				  					(cigars == 1) | 
 				  					(snuff == 1) |
-				  					(chew == 1))
+				  					(chew == 1)
+				  )
 	data_smq = rbind(data_smq, readdata)
 }
 

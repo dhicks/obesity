@@ -2,13 +2,13 @@ library(cowplot)
 library(dplyr)
 library(mgcv)
 library(survey)
-load('2016-07-22.RData')
+load('2016-07-25.RData')
 
 # bmi_breaks = c(18.5, 25, 30, 35, Inf)
 # names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
 
-## Drop one entry with NA id
-dataf = dataf %>% filter(!is.na(id))
+## Drop entries with NA id or 0 sample weight
+dataf = dataf %>% filter(!is.na(id), sample.weight > 0)
 dataf_subset = subset(dataf, (!smoker) & (age.months >= 50*12) & 
 					  	(age.months < 85*12) & 
 					  	(bmi.cat != 'underweight') &
@@ -24,7 +24,7 @@ design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) &
 					(bmi.cat != 'underweight') &
 					!is.na(bmi) & !is.na(education) & !is.na(mort.status))
 ## Build interaction term
-design = update(design, bmi.cat.inter = interaction(bmi.cat, bmi.max.cat, drop = TRUE))
+design = update(design, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
 
 ## TODO: summary statistics
 
@@ -70,16 +70,22 @@ design = update(design, coxfit.cont.fit = coxfit.cont.pred$fit,
 ## Plot predictions
 ggplot(data = design$variables, aes(bmi, coxfit.cont.fit, color = sex, fill = sex)) + 
 	#geom_ribbon(aes(ymin = coxfit.cont.fit - 2*coxfit.cont.se, ymax = coxfit.cont.fit + 2*coxfit.cont.se), alpha = .25) +
-	geom_segment(aes(x = bmi, xend = bmi, 
-					 y = coxfit.cont.fit + qnorm(.025) * coxfit.cont.se, 
-					 yend = coxfit.cont.fit + qnorm(.975) * coxfit.cont.se), 
+	geom_segment(aes(x = bmi, xend = bmi,
+					 y = coxfit.cont.fit + qnorm(.025) * coxfit.cont.se,
+					 yend = coxfit.cont.fit + qnorm(.975) * coxfit.cont.se),
 				 alpha = .5) +
-	#geom_point(alpha = .25) + 
+	geom_smooth(aes(linetype = sex), color = 'black') +
+	#geom_point(alpha = .25) +
 	geom_vline(xintercept = bmi_breaks, color = 'grey') +
 	geom_hline(yintercept = 1) +
-	facet_wrap( ~ race.ethnicity) + 
+	#facet_grid(education ~ race.ethnicity) + 
 	ylab('proportional hazard') + 
 	coord_cartesian(xlim = c(18.5, 50), ylim = c(0, 4))
+
+ggplot(data = design$variables, aes(x = bmi, y = bmi.max, color = coxfit.cont.fit)) +
+	geom_point() + #geom_contour() +
+	coord_cartesian(xlim = c(18.5, 50), ylim = c(18.5, 50)) +
+	scale_color_gradient(limits = c(0, 4), low = 'blue', high = 'red')
 
 
 
