@@ -2,6 +2,7 @@
 library(dplyr)
 library(foreign)
 library(readr)
+library(reshape2)
 library(lubridate)
 
 source('load nhanes 3.R')
@@ -110,11 +111,11 @@ for (file in files) {
 	readdata[readdata == 7] = NA
 	readdata[readdata == 9] = NA
 	readdata = readdata %>%
-		transmute(id = id, smoker = (cigarettes == 1) | 
-				  					(pipe == 1) | 
-				  					(cigars == 1) | 
-				  					(snuff == 1) |
-				  					(chew == 1)
+		transmute(id = id, smoker = (cigarettes == 1) #| 
+				  					# (pipe == 1) | 
+				  					# (cigars == 1) | 
+				  					# (snuff == 1) |
+				  					# (chew == 1)
 				  )
 	data_smq = rbind(data_smq, readdata)
 }
@@ -174,35 +175,46 @@ for (file in files) {
 ## Col. 7: 		Final Mortality Status
 
 ## For the legacy data release
-# files = paste('mortality 2006/NHANES',
-# 			  c('99_00', '01_02', '03_04'),
-# 			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
+files = paste('mortality 2006/NHANES',
+			  c('99_00', '01_02', '03_04'),
+			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
+for (file in files) {
+	data_mort_temp = read_fwf(file,  n_max = -1,
+							  fwf_positions(c(1, 7, 17),
+							  			    c(5, 7, 17),
+							  			  col_names = c('id', 'mort.status', 'dummy'))
+	) %>%
+		transmute(id = as.numeric(id),
+				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+	data_mort = rbind(data_mort, data_mort_temp)
+}
+
+## For the most recent data release
+# files = paste('mortality/NHANES_',
+# 			  c('1999_2000', '2001_2002', '2003_2004'),
+# 			  '_MORT_2011_PUBLIC.dat', sep = '')
+# data_mort = data.frame(id = c(), mort.status = c())
 # for (file in files) {
 # 	data_mort_temp = read_fwf(file,  n_max = -1,
-# 							  fwf_positions(c(1, 7, 17), 
-# 							  			    c(5, 7, 17), 
-# 							  			  col_names = c('id', 'mort.status', 'dummy'))
-# 	) %>%
-# 		transmute(id = as.numeric(id), 
-# 				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+# 			 fwf_positions(c(1, 16, 17),
+# 			 			   c(5, 16, 17),
+# 			 			  col_names = c('id', 'mort.status', 'dummy'))
+# 			) %>%
+# 	transmute(id = as.numeric(id),
+# 			  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
 # 	data_mort = rbind(data_mort, data_mort_temp)
 # }
 
-## For the most recent data release
-files = paste('mortality/NHANES_',
-			  c('1999_2000', '2001_2002', '2003_2004'),
-			  '_MORT_2011_PUBLIC.dat', sep = '')
-data_mort = data.frame(id = c(), mort.status = c())
-for (file in files) {
-	data_mort_temp = read_fwf(file,  n_max = -1,
-			 fwf_positions(c(1, 16, 17),
-			 			   c(5, 16, 17),
-			 			  col_names = c('id', 'mort.status', 'dummy'))
-			) %>%
-	transmute(id = as.numeric(id),
-			  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
-	data_mort = rbind(data_mort, data_mort_temp)
-}
+## Catch duplicate mortality results
+data_mort = data_mort %>% 
+	dcast(id ~ mort.status) %>% 
+	mutate(mort.status = ifelse(deceased > 0, 
+								'deceased', 
+								ifelse(alive > 0, 
+									   'alive', 
+									   NA))) %>%
+	mutate(mort.status = as.factor(mort.status)) %>%
+	select(id, mort.status)
 
 
 ## Combine the datasets
@@ -213,7 +225,8 @@ dataf = full_join(data_demo, data_bmx) %>%
 	##  NB If observed BMI is greater than recalled, use observed BMI
 	mutate(bmi.max = pmax(weight.max / (height/100)**2, bmi)) %>%
 	left_join(data_mort)
-dataf = rbind(dataf, dataf_iii)
+dataf = dataf %>% mutate(mec.home = NA) %>%
+	rbind(dataf_iii)
 
 ## Define BMI categories
 bmi_breaks = c(18.5, 25, 30, 35, Inf)
@@ -230,7 +243,7 @@ dataf$bmi.max.cat = sapply(dataf$bmi.max, bmi_classify) %>%
 	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
 
-save(dataf, bmi_breaks, file = paste(Sys.Date(), '.Rdata', sep = ''))
+#save(dataf, bmi_breaks, file = paste(Sys.Date(), '.Rdata', sep = ''))
 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
 #dataf %>% filter(bmi.cat > bmi.max.cat) %>% nrow

@@ -1,5 +1,7 @@
+library(broom)
 library(cowplot)
 library(dplyr)
+library(knitr)
 library(mgcv)
 library(survey)
 load('2016-07-25.RData')
@@ -12,7 +14,11 @@ dataf = dataf %>% filter(!is.na(id), sample.weight > 0)
 dataf_subset = subset(dataf, (!smoker) & (age.months >= 50*12) & 
 					  	(age.months < 85*12) & 
 					  	(bmi.cat != 'underweight') &
-					  	!is.na(bmi) & !is.na(education) & !is.na(mort.status))
+					  	!is.na(bmi) & !is.na(bmi.max) & 
+					  	!is.na(education) & !is.na(mort.status))
+dataf_subset %>% select(age.years, education, race.ethnicity, bmi.cat, bmi.max.cat, 
+						mort.status) %>% 
+	summary
 ## Move to a survey design object
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
 				   nest = TRUE, 
@@ -21,21 +27,26 @@ design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.wei
 ##   mortality followup as of December 31, 2006
 design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
 					(age.months < 85*12) & 
-					(bmi.cat != 'underweight') &
-					!is.na(bmi) & !is.na(education) & !is.na(mort.status))
+					(bmi.cat != 'underweight') & 
+					!is.na(bmi) & !is.na(bmi.max) & 
+					!is.na(education) & !is.na(mort.status))
 ## Build interaction term
 design = update(design, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
 
-## TODO: summary statistics
-
 ## ----------
-## Weighted survival analysis, categorical BMI
+## Weighted Cox PH model, categorical BMI
 ## Fit the model
 coxfit.cat = svycoxph(Surv(age.years, mort.status == 'deceased') ~ 
 				  			sex + race.ethnicity + education +
 				  			bmi.cat.inter, 
 						   design = design)
 summary(coxfit.cat)
+tidy(coxfit.cat) %>% filter(grepl('bmi.cat.inter', term)) %>% 
+	transmute(term = gsub('bmi.cat.inter', '', term), 
+			  estimate = exp(estimate), 
+			  conf.low = exp(conf.low), 
+			  conf.high = exp(conf.high)) %>%
+	kable(digits = 2)
 ## Make predictions
 coxfit.cat.pred = predict(coxfit.cat, design$variables, type = 'risk', se.fit = TRUE)
 design = update(design, coxfit.cat.fit = coxfit.cat.pred$fit,
@@ -56,7 +67,7 @@ ggplot(data = design$variables, aes(bmi, coxfit.cat.fit, color = sex, fill = sex
 
 ## TODO: plot
 
-## Weighted survivial analysis, continuous BMI
+## Weighted Cox PH model, continuous BMI
 ## Fit the model
 coxfit.cont = svycoxph(Surv(age.years, mort.status == 'deceased') ~
 					   	sex + race.ethnicity + education + 
@@ -74,18 +85,43 @@ ggplot(data = design$variables, aes(bmi, coxfit.cont.fit, color = sex, fill = se
 					 y = coxfit.cont.fit + qnorm(.025) * coxfit.cont.se,
 					 yend = coxfit.cont.fit + qnorm(.975) * coxfit.cont.se),
 				 alpha = .5) +
-	geom_smooth(aes(linetype = sex), color = 'black') +
+	geom_smooth(aes(linetype = sex), color = 'black', se = FALSE,
+				method.args = list(degree = 0)) +
+	#stat_summary(fun.y = mean, aes(linetype = sex), color = 'black', geom = 'line') +
 	#geom_point(alpha = .25) +
 	geom_vline(xintercept = bmi_breaks, color = 'grey') +
 	geom_hline(yintercept = 1) +
-	#facet_grid(education ~ race.ethnicity) + 
+	facet_grid(education ~ race.ethnicity) + 
 	ylab('proportional hazard') + 
-	coord_cartesian(xlim = c(18.5, 50), ylim = c(0, 4))
+	coord_cartesian(xlim = c(18.5, 50), ylim = c(0, 3))
 
 ggplot(data = design$variables, aes(x = bmi, y = bmi.max, color = coxfit.cont.fit)) +
 	geom_point() + #geom_contour() +
 	coord_cartesian(xlim = c(18.5, 50), ylim = c(18.5, 50)) +
 	scale_color_gradient(limits = c(0, 4), low = 'blue', high = 'red')
+
+## ----------
+## Weighted binomial regression, continuous BMI
+binomfit.cont = svyglm(mort.status ~ age.years + sex + race.ethnicity + education +
+					   	bmi * bmi.max, 
+					   design = design, 
+					   family = quasibinomial())
+summary(binomfit.cont)
+## Make predictions
+binomfit.cont.pred = predict(binomfit.cont, design$variables, type = 'response', se.fit = TRUE)
+design = update(design, binomfit.cont.fit = as.numeric(binomfit.cont.pred), 
+				binomfit.cont.se = attr(binomfit.cont.pred, 'var'))
+## Plot predictions
+ggplot(data = design$variables, aes(bmi, binomfit.cont.fit + 1, color = sex, fill = sex)) + 
+	geom_point(aes(y = mort.status), alpha = .25, 
+			   position = position_jitter(height = .1)) +
+	geom_vline(xintercept = bmi_breaks, color = 'grey') +
+	ylab('prob(mortality)') +
+	facet_grid(education ~ race.ethnicity) + 
+	#geom_line(aes(y = binomfit.cont.fit + 1))
+	#stat_summary(fun.y = function (y) {mean(y) + 1}, geom = 'line')
+	geom_smooth(aes(linetype = sex), color = 'black', se = FALSE, 
+				method.args = list(degree = 0))
 
 
 

@@ -8,6 +8,7 @@ Variables of interest in `adult.dat`
 	1: Male
 	2: Female
 1237-40:MXPAXTMR, Age in months at MEC exam
+1245-8: HXPAXTMR, Age in months at home exam
 12:		DMARETHN, Race-ethnicity
 	1: Non-Hispanic White
 	2: Non-Hispanic Black
@@ -21,6 +22,7 @@ Variables of interest in `adult.dat`
 43:		SDPPSU6, Total NHANES III pseudo-PSU
 44-5:	SDPSTRA6, Total NHANES III pseudo-stratum
 61-9:	WTPFEX6, Total MEC-examined sample final weight
+70-8:	WTPFHX6, Final MEC+home examination weight
 1961-63:HAM10S, Up to present time,most ever weighed-lbs
 	888: Blank but applicable
 	999: Don't know
@@ -35,24 +37,36 @@ Variables of interest in `adult.dat`
 
 system.time({
 	data_adult = read_fwf('NHANES III/adult.dat', n_max = -1, 
-						  fwf_positions(c(1, 15, 1237, 12, 1256, 1961, 
-						  					2281, 2334, 2330, 2311, 43, 44, 
-						  					61, 1000), 
-						  				c(5, 15, 1240, 12, 1257, 1963, 
-						  				  	2281, 2334, 2330, 2311, 43, 45, 
-						  				  	69, 1000), 
+						  fwf_positions(c(1, 15, 1237, 
+						  					1245,
+						  					12, 
+						  					1256, 1961, 
+						  					2281, 2334, 
+						  					2330, 2311, 
+						  					43, 44, 70, 
+						  					1000), 
+						  				c(5, 15, 1240, 
+						  				  	1248, 
+						  				  	12, 
+						  				  	1257, 1963, 
+						  				  	2281, 2334, 
+						  				  	2330, 2311, 
+						  				  	43, 45, 78, 
+						  				  	1000), 
 						  				col_names = 
-						  					c('id', 'sex', 'age.months', 
+						  					c('id', 'sex', 'age.mec', 
+						  					  'age.home',
 						  					  'race.ethnicity', 
-						  					  'education.yrs', 
-						  					  'weight.max', 
+						  					  'education.yrs', 'weight.max', 
 						  					  'cigarettes', 'pipe', 
 						  					  'cigars', 'chew', 
 						  					  'psu', 'stratum', 'sample.weight', 
 						  					  'dummy'))) %>%
 		transmute(id = as.numeric(id), 
 				  sex = factor(sex, labels = c('male', 'female')),
-				  age.months = as.numeric(age.months), 
+				  age.months = ifelse(!is.na(age.mec), 
+				  					as.numeric(age.mec), 
+				  					as.numeric(age.home)),
 				  age.years = age.months %/% 12,
 				  race.ethnicity = factor(race.ethnicity, 
 				  						labels = c('Non-Hispanic White', 
@@ -111,7 +125,7 @@ data_adult$cigarettes = sapply(data_adult$cigarettes, code_tobacco)
 data_adult$pipe = sapply(data_adult$pipe, code_tobacco)
 data_adult$cigars = sapply(data_adult$cigars, code_tobacco)
 data_adult$chew = sapply(data_adult$chew, code_tobacco)
-data_adult$smoker = data_adult$cigarettes | data_adult$pipe | data_adult$cigars | data_adult$chew
+data_adult$smoker = data_adult$cigarettes #| data_adult$pipe | data_adult$cigars | data_adult$chew
 
 data_adult = data_adult %>% select(-c(education.yrs, cigarettes, pipe, cigars, chew))
 
@@ -122,15 +136,23 @@ Variables of interest in `exam.dat`
 1508-13:BMPWT, Weight (kg)
 1528-32:BMPHT, Standing height (cm)
 1524-7:BMPBMI, Body mass index
+	NB need to calculate for home examinees? 
+
+11:		DMPSTAT, Examination/interview status
+	2: Interviewed, MEC-examined
+	3: Interviewed, home-examined
 "
 
 system.time({
 	data_exam = read_fwf('NHANES III/exam.dat', 
-						 fwf_positions(c(1, 1508, 1528, 1524, 1533), 
-						 			  c(5,  1513, 1532, 1527, 1533), 
-						 	col_names = c('id', 'weight', 'height', 'bmi', 'dummy')),
+						 fwf_positions(c(1, 11, 1508, 1528, 1524, 1533), 
+						 			  c(5,  11, 1513, 1532, 1527, 1533), 
+						 	col_names = c('id', 'mec.home', 
+						 				  'weight', 'height', 'bmi', 'dummy')),
 						 n_max = -1) %>%
 		transmute(id = as.numeric(id), 
+				  mec.home = factor(mec.home, levels = c(2,3), 
+				  				  labels = c('mec', 'home')),
 				  weight = as.numeric(weight), 
 				  height = as.numeric(height), 
 				  bmi = as.numeric(bmi))
@@ -177,15 +199,36 @@ data_exam$bmi = sapply(data_exam$bmi, catch_errors_bmi)
 ## Col. 1-5:	NHANES Respondent Sequence Number
 ## Col. 7: 		Final Mortality Status
 
-system.time({
-	data_mort = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.dat', 
-						 fwf_positions(c(1, 16, 17), 
-						 			   c(5, 16, 17), 
-						 			  col_names = c('id', 'mort.status', 'dummy')),
-						 n_max = -1) %>%
-		transmute(id = as.numeric(id), 
-				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
-})
+## For the legacy data release
+data_mort = read_fwf('mortality 2006/NHANES3_MORT_PUBLIC_USE_2010.DAT',  
+					  fwf_positions(c(1, 7, 17),
+					  			    c(5, 7, 17),
+					  			  col_names = c('id', 'mort.status', 'dummy')),
+					  n_max = -1) %>%
+	transmute(id = as.numeric(id),
+			  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+
+## For the most recent data release
+# system.time({
+# 	data_mort = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.dat', 
+# 						 fwf_positions(c(1, 16, 17), 
+# 						 			   c(5, 16, 17), 
+# 						 			  col_names = c('id', 'mort.status', 'dummy')),
+# 						 n_max = -1) %>%
+# 		transmute(id = as.numeric(id), 
+# 				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+# })
+
+## Catch duplicate mortality results
+data_mort = data_mort %>% 
+	dcast(id ~ mort.status) %>% 
+	mutate(mort.status = ifelse(!is.na(deceased),
+								'deceased', 
+								ifelse(!is.na(alive),
+									   'alive', 
+									   NA))) %>% 
+	mutate(mort.status = as.factor(mort.status)) %>%
+	select(id, mort.status)
 
 dataf_iii = left_join(data_adult, data_exam) %>%
 	left_join(data_mort) %>% 
