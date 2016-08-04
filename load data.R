@@ -20,12 +20,12 @@ suffixes = c('', '_B', '_C')
 ##	2: Female [sic]
 ## RIDAGEEX:Best age in months at date of examination for individuals under 80 years of age at the time of MEC exam.
 ##	NB It's not clear whether Stokes 2014 used age in months or integer years
-## RIDRETH1:Recode of reported race and ethnicity information.
-##	1: Mexican American
-##	2: Other Hispanic
-##	3: Non-Hispanic White
-## 	4: Non-Hispanic Black
-##	5: Other Race - Including Multi-Racial
+## RIDRETH2:Linked NH3 Race/Ethnicity
+##	1: Non-Hispanic White
+##	2: Non-Hispanic Black
+##	3: Mexican American
+## 	4: Other Race - Including Multi-Racial
+##	5: Other Hispanic
 ## DMDEDUC2:Education Level - Adults 20+
 ##	NB It's not clear which variable Stokes 2014 used to control for education
 ##	1:	Less than 9th Grade
@@ -54,11 +54,11 @@ for (file in files) {
 				  age.months = RIDAGEEX,
 				  age.years = age.months %/% 12,
 				  race.ethnicity = factor(RIDRETH1, 
-				  						labels = c('Mexican American', 
-				  								   'Other Hispanic', 
-				  								   'Non-Hispanic White',
+				  						labels = c('Non-Hispanic White',
 				  								   'Non-Hispanic Black', 
-				  								   'Other, Multiracial')),
+				  								   'Mexican American', 
+				  								   'Other, Multiracial',
+				  								   'Other Hispanic')),
 				  education = factor(DMDEDUC2, 
 				  				   labels = c('Less than High School', 
 				  				   		   		'Some High School', 
@@ -173,19 +173,23 @@ for (file in files) {
 ## Variables of interest:
 ## Col. 1-5:	NHANES Respondent Sequence Number
 ## Col. 7: 		Final Mortality Status
+## Col. 13-5:	Person Months of Follow-up from MEC Exam Date
 
 ## For the legacy data release
 files = paste('mortality 2006/NHANES',
 			  c('99_00', '01_02', '03_04'),
 			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
+data_mort = data.frame(id = c(), mort.status = c())
 for (file in files) {
 	data_mort_temp = read_fwf(file,  n_max = -1,
-							  fwf_positions(c(1, 7, 17),
-							  			    c(5, 7, 17),
-							  			  col_names = c('id', 'mort.status', 'dummy'))
-	) %>%
+							  fwf_positions(c(1, 7, 13, 17),
+							  			    c(5, 7, 15, 17),
+							  			  col_names = c('id', 'mort.status', 
+							  			  			  'follow.months', 'dummy')), 
+							  na = c('.', ' ')) %>%
 		transmute(id = as.numeric(id),
-				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
+				  mort.status = factor(mort.status, labels = c('alive', 'deceased')), 
+				  follow.months = as.numeric(follow.months))
 	data_mort = rbind(data_mort, data_mort_temp)
 }
 
@@ -207,14 +211,14 @@ for (file in files) {
 
 ## Catch duplicate mortality results
 data_mort = data_mort %>% 
-	dcast(id ~ mort.status) %>% 
-	mutate(mort.status = ifelse(deceased > 0, 
+	dcast(id + follow.months ~ mort.status) %>% 
+	mutate(mort.status = ifelse(!is.na(deceased), 
 								'deceased', 
-								ifelse(alive > 0, 
+								ifelse(!is.na(alive),
 									   'alive', 
-									   NA))) %>%
+									   NA))) %>% 
 	mutate(mort.status = as.factor(mort.status)) %>%
-	select(id, mort.status)
+	select(id, mort.status, follow.months)
 
 
 ## Combine the datasets
@@ -233,7 +237,7 @@ bmi_breaks = c(18.5, 25, 30, 35, Inf)
 names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
 
 bmi_classify = function (bmi) {
-	return(names(which(bmi < bmi_breaks))[1])
+	return(names(which(bmi <= bmi_breaks))[1])
 }
 
 dataf$bmi.cat = sapply(dataf$bmi, bmi_classify) %>% 
@@ -243,7 +247,7 @@ dataf$bmi.max.cat = sapply(dataf$bmi.max, bmi_classify) %>%
 	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
 	C(treatment, base = 2)
 
-#save(dataf, bmi_breaks, file = paste(Sys.Date(), '.Rdata', sep = ''))
+save(dataf, bmi_breaks, file = paste(Sys.Date(), '.Rdata', sep = ''))
 
 # ## No. cases where current BMI category is greater than "maximum" BMI category
 #dataf %>% filter(bmi.cat > bmi.max.cat) %>% nrow
