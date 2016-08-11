@@ -4,7 +4,7 @@ library(dplyr)
 library(knitr)
 library(mgcv)
 library(survey)
-load('2016-08-04.RData')
+load('2016-08-11.RData')
 
 # bmi_breaks = c(18.5, 25, 30, 35, Inf)
 # names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
@@ -14,19 +14,33 @@ dataf = dataf %>%
 		filter(!is.na(id), sample.weight > 0) %>%
 		mutate(
 			## Censor mortality at the 85-years-old cutoff
-			mort.censored = (mort.status == 'deceased' & age.months + follow.months < 85*12), 
+			mort.2006.c = (mort.2006 == 'deceased' & age.months + follow.months.2006 < 85*12), 
+			mort.2011.c = (mort.2011 == 'deceased' & age.months + follow.months.2011 < 85*12),
 			## Interaction term between categorical BMI variables
 			bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
-dataf_subset = subset(dataf, (!smoker) & (age.months >= 50*12) & 
+dataf.2006 = subset(dataf, (!smoker) & (age.months >= 50*12) & 
 					  	(age.months < 85*12) & 
-					  	(follow.months > 0) &
+					  	(follow.months.2006 > 0) &
 					  	(bmi.cat != 'underweight') & 
 					  	(bmi < 75) & (bmi.max < 75) &
 					  	!is.na(bmi) & !is.na(bmi.max) & 
-					  	!is.na(education) & !is.na(mort.censored))
-dataf_subset %>% select(age.years, education, race.ethnicity, bmi, bmi.max, 
+					  	!is.na(education) & !is.na(mort.2006.c))
+dataf.2011 = subset(dataf, (!smoker) & (age.months >= 50*12) & 
+						(age.months < 85*12) & 
+						(follow.months.2011 > 0) &
+						(bmi.cat != 'underweight') & 
+						(bmi < 75) & (bmi.max < 75) &
+						!is.na(bmi) & !is.na(bmi.max) & 
+						!is.na(education) & !is.na(mort.2011.c))
+## These samples are exactly the same individuals
+# table(dataf.2006$id == dataf.2011$id)
+## There are some individuals who are in the 2006 followup but not in 2011
+## But they were all 17-22 years old and in NHANES 3
+# dataf %>% filter(!is.na(mort.2006), is.na(mort.2011)) %>% .$age.years %>% summary
+
+dataf.2011 %>% select(age.years, education, race.ethnicity, bmi, bmi.max, 
 						bmi.cat, bmi.max.cat, bmi.cat.inter,
-						mort.censored) %>% 
+						mort.2006.c, mort.2011.c) %>% 
 	summary
 ## Move to a survey design object
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
@@ -34,15 +48,23 @@ design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.wei
 				   data = dataf)
 ## Filtered dataset: nonsmokers, 50-84 years old, not underweight, 
 ##   mortality followup as of December 31, 2006
-design = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
+design.2006 = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
 					(age.months < 85*12) & 
-					(follow.months > 0) &
+					(follow.months.2006 > 0) &
 					(bmi.cat != 'underweight') & 
 					(bmi < 75) & (bmi.max < 75) &
 					!is.na(bmi) & !is.na(bmi.max) & 
-					!is.na(education) & !is.na(mort.censored))
+					!is.na(education) & !is.na(mort.2006.c))
+design.2011 = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
+					 	(age.months < 85*12) & 
+					 	(follow.months.2011 > 0) &
+					 	(bmi.cat != 'underweight') & 
+					 	(bmi < 75) & (bmi.max < 75) &
+					 	!is.na(bmi) & !is.na(bmi.max) & 
+					 	!is.na(education) & !is.na(mort.2011.c))
 ## Build interaction term
-design = update(design, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
+design.2006 = update(design.2006, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
+design.2011 = update(design.2011, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
 
 ## ----------
 ## Stokes' results
@@ -72,15 +94,15 @@ stokes.sum = data.frame(
 ## ----------
 ## Set up data frame for grid-based predictions
 predictions = expand.grid(
-	bmi = round(min(dataf_subset$bmi)):round(max(dataf_subset$bmi)), 
-	bmi.max = round(min(dataf_subset$bmi.max)):
-		round(max(dataf_subset$bmi.max)), 
-	age.years = median(dataf_subset$age.years),
-	sex = factor('male', levels = levels(dataf_subset$sex)),
+	bmi = round(min(dataf.2011$bmi)):round(max(dataf.2011$bmi)), 
+	bmi.max = round(min(dataf.2011$bmi.max)):
+		round(max(dataf.2011$bmi.max)), 
+	age.years = median(dataf.2011$age.years),
+	sex = factor('male', levels = levels(dataf.2011$sex)),
 	race.ethnicity = factor('Non-Hispanic White', 
-							levels = levels(dataf_subset$race.ethnicity)), 
+							levels = levels(dataf.2011$race.ethnicity)), 
 	education = factor('Less than High School', 
-					   levels = levels(dataf_subset$education))) %>%
+					   levels = levels(dataf.2011$education))) %>%
 	filter(bmi <= bmi.max)
 
 bmi_classify = function (bmi) {
@@ -100,12 +122,20 @@ predictions$bmi.cat.inter = with(predictions,
 ## ----------
 ## Weighted Cox PH model, categorical BMI
 ## Fit the model
-coxfit.cat = svycoxph(Surv(age.years, mort.censored) ~ 
+coxfit.cat.2006 = svycoxph(Surv(age.years, mort.2006.c) ~ 
 				  			sex + race.ethnicity + education +
 				  			bmi.cat.inter, 
-						   design = design)
-summary(coxfit.cat)
+						   design = design.2006)
+coxfit.cat.2011 = svycoxph(Surv(age.years, mort.2011.c) ~
+						   	sex + race.ethnicity + education + 
+						   	bmi.cat.inter,
+						   design = design.2011)
+summary(coxfit.cat.2006)
+summary(coxfit.cat.2011)
 ## Extract summary
+
+## *** START WORK HERE ***
+
 coxfit.cat.sum = coxfit.cat %>% 
 	tidy %>% 
 	filter(grepl('bmi.cat.inter', term)) %>%
