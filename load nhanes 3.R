@@ -107,6 +107,7 @@ data_adult$race.ethnicity = factor(data_adult$race.ethnicity,
 								   		   'Mexican American', 
 								   		   'Other, Multiracial',
 								   		   'Other Hispanic'))
+data_adult = data_adult %>% select(-one_of('race', 'ethnicity'))
 
 code_ed.yrs = function (ed.yrs) {
 	if (ed.yrs == '88' | ed.yrs == '99' | is.na(ed.yrs)) {
@@ -212,21 +213,13 @@ data_exam$bmi = sapply(data_exam$bmi, catch_errors_bmi)
 ## Public-use Linked Mortality Files
 ## http://www.cdc.gov/nchs/data_access/data_linkage/mortality/data_files_data_dictionaries.htm
 ## Variables of interest:  
-## Col. 1-5: 	NHANES Respondent Sequence Number
-## Col. 16:		Final Morality Status
-##	0: Assumed alive
-##	1: Assumed deceased
-##  Blank: Ineligible or under age 18
-## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
-## 
+##
 ## In the legacy data file:
 ## Variables of interest:
 ## Col. 1-5:	NHANES Respondent Sequence Number
 ## Col. 7: 		Final Mortality Status
 ## Col. 15-7:	Person Months of Follow-up from MEC/Home
-
-## For the legacy data release
-data_mort = read_fwf('mortality 2006/NHANES3_MORT_PUBLIC_USE_2010.DAT',  
+data_mort_2006 = read_fwf('mortality 2006/NHANES3_MORT_PUBLIC_USE_2010.DAT',  
 					  fwf_positions(c(1, 7, 15, 17),
 					  			    c(5, 7, 17, 17),
 					  			  col_names = c('id', 'mort.status', 
@@ -234,30 +227,37 @@ data_mort = read_fwf('mortality 2006/NHANES3_MORT_PUBLIC_USE_2010.DAT',
 					  na = c('.', ' '),
 					  n_max = -1) %>%
 	transmute(id = as.numeric(id),
-			  mort.status = factor(mort.status, labels = c('alive', 'deceased')), 
-			  follow.months = as.numeric(follow.months))
+			  mort.2006 = factor(mort.status, labels = c('alive', 'deceased')), 
+			  follow.months.2006 = as.numeric(follow.months))
+## Col. 1-5: 	NHANES Respondent Sequence Number
+## Col. 16:		Final Morality Status
+##	0: Assumed alive
+##	1: Assumed deceased
+##  Blank: Ineligible or under age 18
+## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
+data_mort_2011 = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.DAT', 
+						  fwf_positions(c(1, 16, 47, 50), 
+						  				c(5, 16, 49, 50), 
+						  				col_names = c('id', 'mort.status', 
+						  							  'follow.months', 'dummy')), 
+						  na = c('.', ' '),
+						  n_max = -1) %>%
+	transmute(id = as.numeric(id), 
+			  mort.2011 = factor(mort.status, labels = c('alive', 'deceased')), 
+			  follow.months.2011 = as.numeric(follow.months))
 
-## For the most recent data release
-# system.time({
-# 	data_mort = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.dat', 
-# 						 fwf_positions(c(1, 16, 17), 
-# 						 			   c(5, 16, 17), 
-# 						 			  col_names = c('id', 'mort.status', 'dummy')),
-# 						 n_max = -1) %>%
-# 		transmute(id = as.numeric(id), 
-# 				  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
-# })
+data_mort = full_join(data_mort_2006, data_mort_2011, by = 'id')
 
 ## Catch duplicate mortality results
-data_mort = data_mort %>% 
-	dcast(id + follow.months ~ mort.status) %>% 
-	mutate(mort.status = ifelse(!is.na(deceased), 
-									 'deceased', 
-									 ifelse(!is.na(alive),
-									 	   'alive', 
-									 	   NA))) %>% 
-	mutate(mort.status = as.factor(mort.status)) %>% 
-	select(id, mort.status, follow.months)
+# data_mort = data_mort %>%
+# 	dcast(id + follow.months ~ mort.status) %>%
+# 	mutate(mort.status = ifelse(!is.na(deceased),
+# 									 'deceased',
+# 									 ifelse(!is.na(alive),
+# 									 	   'alive',
+# 									 	   NA))) %>%
+# 	mutate(mort.status = as.factor(mort.status)) %>%
+# 	select(id, mort.status, follow.months)
 
 dataf_iii = left_join(data_adult, data_exam) %>%
 	left_join(data_mort) %>% 

@@ -161,25 +161,15 @@ for (file in files) {
 
 ## Public-use Linked Mortality Files
 ## http://www.cdc.gov/nchs/data_access/data_linkage/mortality/data_files_data_dictionaries.htm
-## Variables of interest:  
-## Col. 1-5: 	NHANES Respondent Sequence Number
-## Col. 16:		Final Morality Status
-##	0: Assumed alive
-##	1: Assumed deceased
-##  Blank: Ineligible or under age 18
-## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
-## 
-## In the legacy data file:
-## Variables of interest:
+
+## For the legacy data release
 ## Col. 1-5:	NHANES Respondent Sequence Number
 ## Col. 7: 		Final Mortality Status
 ## Col. 13-5:	Person Months of Follow-up from MEC Exam Date
-
-## For the legacy data release
 files = paste('mortality 2006/NHANES',
 			  c('99_00', '01_02', '03_04'),
 			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
-data_mort = data.frame(id = c(), mort.status = c())
+data_mort_2006 = data.frame(id = c(), mort.status = c())
 for (file in files) {
 	data_mort_temp = read_fwf(file,  n_max = -1,
 							  fwf_positions(c(1, 7, 13, 17),
@@ -188,37 +178,46 @@ for (file in files) {
 							  			  			  'follow.months', 'dummy')), 
 							  na = c('.', ' ')) %>%
 		transmute(id = as.numeric(id),
-				  mort.status = factor(mort.status, labels = c('alive', 'deceased')), 
-				  follow.months = as.numeric(follow.months))
-	data_mort = rbind(data_mort, data_mort_temp)
+				  mort.2006 = factor(mort.status, labels = c('alive', 'deceased')), 
+				  follow.months.2006 = as.numeric(follow.months))
+	data_mort_2006 = rbind(data_mort_2006, data_mort_temp)
 }
 
 ## For the most recent data release
-# files = paste('mortality/NHANES_',
-# 			  c('1999_2000', '2001_2002', '2003_2004'),
-# 			  '_MORT_2011_PUBLIC.dat', sep = '')
-# data_mort = data.frame(id = c(), mort.status = c())
-# for (file in files) {
-# 	data_mort_temp = read_fwf(file,  n_max = -1,
-# 			 fwf_positions(c(1, 16, 17),
-# 			 			   c(5, 16, 17),
-# 			 			  col_names = c('id', 'mort.status', 'dummy'))
-# 			) %>%
-# 	transmute(id = as.numeric(id),
-# 			  mort.status = factor(mort.status, labels = c('alive', 'deceased')))
-# 	data_mort = rbind(data_mort, data_mort_temp)
-# }
+## Col. 1-5: 	NHANES Respondent Sequence Number
+## Col. 16:		Final Morality Status
+##	0: Assumed alive
+##	1: Assumed deceased
+##  Blank: Ineligible or under age 18
+## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
+files = paste('mortality/NHANES_',
+			  c('1999_2000', '2001_2002', '2003_2004'),
+			  '_MORT_2011_PUBLIC.dat', sep = '')
+data_mort_2011 = data.frame(id = c(), mort.status = c())
+for (file in files) {
+	data_mort_temp = read_fwf(file,  n_max = -1,
+			 fwf_positions(c(1, 16, 47, 17),
+			 			   c(5, 16, 49, 17),
+			 			  col_names = c('id', 'mort.status', 
+			 			  			    'follow.months', 'dummy'))
+			) %>%
+	transmute(id = as.numeric(id),
+			  mort.2011 = factor(mort.status, labels = c('alive', 'deceased')),
+			  follow.months.2011 = as.numeric(follow.months))
+	data_mort_2011 = rbind(data_mort_2011, data_mort_temp)
+}
+data_mort = full_join(data_mort_2006, data_mort_2011, by = 'id')
 
 ## Catch duplicate mortality results
-data_mort = data_mort %>% 
-	dcast(id + follow.months ~ mort.status) %>% 
-	mutate(mort.status = ifelse(!is.na(deceased), 
-								'deceased', 
-								ifelse(!is.na(alive),
-									   'alive', 
-									   NA))) %>% 
-	mutate(mort.status = as.factor(mort.status)) %>%
-	select(id, mort.status, follow.months)
+# data_mort = data_mort %>% 
+# 	dcast(id + follow.months ~ mort.status) %>% 
+# 	mutate(mort.status = ifelse(!is.na(deceased), 
+# 								'deceased', 
+# 								ifelse(!is.na(alive),
+# 									   'alive', 
+# 									   NA))) %>% 
+# 	mutate(mort.status = as.factor(mort.status)) %>%
+# 	select(id, mort.status, follow.months)
 
 
 ## Combine the datasets
