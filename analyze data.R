@@ -68,7 +68,7 @@ design.2011 = update(design.2011, bmi.cat.inter = interaction(bmi.max.cat, bmi.c
 
 ## ----------
 ## Stokes' results
-stokes.sum = data.frame(
+stokes = data.frame(
 	term = c('overweight.normal', 'overweight.overweight', 
 			 'obese I.normal', 'obese I.overweight', 'obese I.obese I', 
 			 'obese II.normal', 'obese II.overweight', 'obese II.obese I', 
@@ -88,7 +88,9 @@ stokes.sum = data.frame(
 	conf.high = c(2.56, 1.60, 
 				  4.33, 2.66, 2.24, 
 				  12.27, 5.44, 3.36, 2.89),
-	model = 'Stokes'
+	model = 'Stokes',
+	mort.data = '2006',
+	model.data = 'Stokes'
 )
 
 ## ----------
@@ -132,12 +134,13 @@ coxfit.cat.2011 = svycoxph(Surv(age.years, mort.2011.c) ~
 						   design = design.2011)
 summary(coxfit.cat.2006)
 summary(coxfit.cat.2011)
-## Extract summary
-
-## *** START WORK HERE ***
-
-coxfit.cat.sum = coxfit.cat %>% 
-	tidy %>% 
+## Extract coefficient estimates
+estimates = list(coxfit.cat.2006 = coxfit.cat.2006, 
+	 coxfit.cat.2011 = coxfit.cat.2011) %>%
+	lapply(tidy) %>%
+	do.call('rbind', .) %>% 
+	mutate(model = 'cox.cat', mort.data = c(rep('2006', nrow(.)/2), 
+											rep('2011', nrow(.)/2))) %>% 
 	filter(grepl('bmi.cat.inter', term)) %>%
 	mutate(term = gsub('bmi.cat.inter', '', term)) %>%
 	mutate(bmi.max = stringr::str_match(term, '(^[^\\.]*)\\.')[,2], 
@@ -148,9 +151,13 @@ coxfit.cat.sum = coxfit.cat %>%
 			  estimate = exp(estimate), 
 			  conf.low = exp(conf.low), 
 			  conf.high = exp(conf.high), 
-			  model = 'coxfit.cat')
+			  model = 'coxfit.cat', 
+			  mort.data = mort.data, 
+			  model.data = paste(model, mort.data))
+estimates = rbind(estimates, stokes)
 
 ## Tables and plots of coefficient estimates
+TODO: fix these
 coxfit.cat.sum %>% select(bmi:conf.high) %>%
 	kable(digits = 2)
 ggplot(coxfit.cat.sum, aes(bmi.max, bmi, fill = estimate)) + 
@@ -163,16 +170,17 @@ ggplot(coxfit.cat.sum, aes(bmi.max, bmi, fill = estimate)) +
 								sep = '')))
 
 ## Compare w/ Stokes' estimates
-ggplot(rbind(coxfit.cat.sum, stokes.sum), 
+ggplot(estimates,
 	   aes(x = bmi, y = estimate, 
 	   	ymin = conf.low, ymax = conf.high, 
-	   	color = as.factor(model))) + 
+	   	color = model.data, 
+	   	group = model.data)) + 
 	#geom_linerange(position = 'dodge') + geom_point(position = 'dodge') + 
 	geom_errorbar(width = .25, position = position_dodge(width = .25)) + 
 	geom_point(position = position_dodge(width = .25)) +
-	geom_line(aes(group = model), position = position_dodge(width = .25)) +
+	geom_line(position = position_dodge(width = .25)) +
 	geom_hline(yintercept = 1) +
-	scale_color_brewer(palette = 'Set1', name = 'estimate') +
+	scale_color_brewer(palette = 'Set1', name = 'model x data') +
 	coord_flip(ylim = c(0, 6)) + facet_grid( ~ bmi.max)
 
 ## Make predictions
