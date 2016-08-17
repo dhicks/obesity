@@ -13,9 +13,16 @@ dataf = dataf %>%
 		## Drop entries with NA id or 0 sample weight
 		filter(!is.na(id), sample.weight > 0) %>%
 		mutate(
-			## Censor mortality at the 85-years-old cutoff
-			mort.2006.c = (mort.2006 == 'deceased' & age.months + follow.months.2006 < 85*12), 
-			mort.2011.c = (mort.2011 == 'deceased' & age.months + follow.months.2011 < 85*12),
+			## Censor mortality at the 85-years-old cutoff: 
+			##  actually age at followup
+			age.follow.2006 = age.months + follow.months.2006,
+			##  censor at 85 years old
+			age.follow.2006.c = pmin(age.follow.2006, 85*12-1),
+			##  censored followup months
+			follow.months.2006.c = age.follow.2006.c - age.months,
+			## censored mortality
+			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006 , NA), 
+			#mort.2011.c = ifelse(age.months + follow.months.2011 < 85*12, mort.2011, NA),
 			## Interaction term between categorical BMI variables
 			bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
 dataf.2006 = subset(dataf, (!smoker) & (age.months >= 50*12) & 
@@ -24,7 +31,8 @@ dataf.2006 = subset(dataf, (!smoker) & (age.months >= 50*12) &
 					  	(bmi.cat != 'underweight') & 
 					  	(bmi < 75) & (bmi.max < 75) &
 					  	!is.na(bmi) & !is.na(bmi.max) & 
-					  	!is.na(education) & !is.na(mort.2006.c))
+					  	!is.na(education) #& !is.na(mort.2006.c)
+					)
 dataf.2011 = subset(dataf, (!smoker) & (age.months >= 50*12) & 
 						(age.months < 85*12) & 
 						(follow.months.2011 > 0) &
