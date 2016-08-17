@@ -232,19 +232,14 @@ dataf = dataf %>% mutate(mec.home = NA) %>%
 	rbind(dataf_iii)
 
 ## Define BMI categories
-bmi_breaks = c(18.5, 25, 30, 35, Inf)
-names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
+bmi_breaks = c(0, 18.5, 25, 30, 35, Inf)
+bmi_labels = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
 
-bmi_classify = function (bmi) {
-	return(names(which(bmi <= bmi_breaks))[1])
-}
-
-dataf$bmi.cat = sapply(dataf$bmi, bmi_classify) %>% 
-	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
-	C(treatment, base = 2)
-dataf$bmi.max.cat = sapply(dataf$bmi.max, bmi_classify) %>% 
-	factor(levels = names(bmi_breaks), ordered = FALSE) %>%
-	C(treatment, base = 2)
+dataf = dataf %>% 
+	mutate(bmi.cat = {cut(bmi, breaks = bmi_breaks, labels = bmi_labels) %>%
+						C(treatment, base = 2)},
+		   bmi.max.cat = {cut(bmi.max, breaks = bmi_breaks, labels = bmi_labels) %>%
+		   				C(treatment, base = 2)})
 
 save(dataf, bmi_breaks, file = paste(Sys.Date(), '.Rdata', sep = ''))
 
