@@ -93,14 +93,13 @@ stokes = data.frame(
 ## ----------
 ## Set up data frame for grid-based predictions
 predictions = expand.grid(
-	bmi = round(min(dataf.2011$bmi)):round(max(dataf.2011$bmi)), 
-	bmi.max = round(min(dataf.2011$bmi.max)):
-		round(max(dataf.2011$bmi.max)), 
-	age.years = median(dataf.2011$age.years),
-	sex = factor('male', levels = levels(dataf.2011$sex)),
+	bmi = 19:45, 
+	bmi.max = 19:45, 
+	age.years = svymean(~ age.years, design.2011)[1],
+	sex = factor('female', levels = levels(dataf.2011$sex)),
 	race.ethnicity = factor('Non-Hispanic White', 
 							levels = levels(dataf.2011$race.ethnicity)), 
-	education = factor('Less than High School', 
+	education = factor('High School', 
 					   levels = levels(dataf.2011$education))) %>%
 	filter(bmi <= bmi.max)
 
@@ -154,17 +153,17 @@ estimates = list(coxfit.cat.2006 = coxfit.cat.2006,
 estimates = rbind(estimates, stokes)
 
 ## Tables and plots of coefficient estimates
-TODO: fix these
-coxfit.cat.sum %>% select(bmi:conf.high) %>%
-	kable(digits = 2)
-ggplot(coxfit.cat.sum, aes(bmi.max, bmi, fill = estimate)) + 
-	geom_tile() +
-	scale_fill_gradient2(limits = c(0, NA), midpoint = 1, 
-						 name = 'prop. hazard') + 
-	geom_text(aes(label = paste(format(estimate, digits = 2), '\n',
-								'(', format(conf.low, digits = 2), 
-									'-', format(conf.high, digits = 2), ')',
-								sep = '')))
+# TODO: fix these
+# coxfit.cat.sum %>% select(bmi:conf.high) %>%
+# 	kable(digits = 2)
+# ggplot(coxfit.cat.sum, aes(bmi.max, bmi, fill = estimate)) + 
+# 	geom_tile() +
+# 	scale_fill_gradient2(limits = c(0, NA), midpoint = 1, 
+# 						 name = 'prop. hazard') + 
+# 	geom_text(aes(label = paste(format(estimate, digits = 2), '\n',
+# 								'(', format(conf.low, digits = 2), 
+# 									'-', format(conf.high, digits = 2), ')',
+# 								sep = '')))
 
 ## Compare w/ Stokes' estimates
 ggplot(estimates,
@@ -173,27 +172,28 @@ ggplot(estimates,
 	   	color = model.data, 
 	   	group = model.data)) + 
 	#geom_linerange(position = 'dodge') + geom_point(position = 'dodge') + 
-	geom_errorbar(width = .25, position = position_dodge(width = .25)) + 
+	#geom_errorbar(width = .25, position = position_dodge(width = .25)) + 
+	geom_linerange(position = position_dodge(width = .25), size = 1) +
 	geom_point(position = position_dodge(width = .25)) +
 	geom_line(position = position_dodge(width = .25)) +
 	geom_hline(yintercept = 1) +
 	scale_color_brewer(palette = 'Set1', name = 'model x data') +
-	coord_flip(ylim = c(0, 6)) + facet_grid( ~ bmi.max)
+	coord_flip(ylim = c(0, 5)) + 
+	facet_grid( ~ bmi.max)
 
 ## Make predictions
-coxfit.cat.pred = predict(coxfit.cat, predictions, type = 'risk', se.fit = TRUE)
+coxfit.cat.2006.pred = predict(coxfit.cat.2006, predictions, type = 'risk', se.fit = TRUE)
 predictions = predictions %>% mutate(
-	coxfit.cat.fit = coxfit.cat.pred$fit,
-	coxfit.cat.se = coxfit.cat.pred$se.fit)
+	coxfit.cat.2006.fit = coxfit.cat.2006.pred$fit,
+	coxfit.cat.2006.se = coxfit.cat.2006.pred$se.fit)
 ## Plot predictions
-## TODO: I don't like this plot
-ggplot(data = predictions, aes(bmi, coxfit.cat.fit, fill = bmi.max.cat)) + 
-	geom_ribbon(aes(ymin = coxfit.cat.fit - 2*coxfit.cat.se, ymax = coxfit.cat.fit + 2*coxfit.cat.se), alpha = .1) +
+ggplot(data = predictions, aes(bmi, coxfit.cat.2006.fit, fill = bmi.max.cat)) + 
+	geom_ribbon(aes(ymin = coxfit.cat.2006.fit - 2*coxfit.cat.2006.se, ymax = coxfit.cat.2006.fit + 2*coxfit.cat.2006.se), alpha = .1) +
 	# geom_segment(aes(x = bmi, xend = bmi,
-	# 				 y = coxfit.cat.fit + qnorm(.025) * coxfit.cat.se,
-	# 				 yend = coxfit.cat.fit + qnorm(.975) * coxfit.cat.se),
+	# 				 y = coxfit.cat.2006.fit + qnorm(.025) * coxfit.cat.se,
+	# 				 yend = coxfit.cat.2006.fit + qnorm(.975) * coxfit.cat.se),
 	# 			 alpha = .5) +
-	geom_point(aes(color = bmi.max.cat), alpha = .25) +
+	geom_line(aes(color = bmi.max.cat), alpha = 1) +
 	geom_vline(xintercept = bmi_breaks, color = 'grey') +
 	geom_hline(yintercept = 1) +
 	ylab('proportional hazard') + 
@@ -230,29 +230,31 @@ ggplot(data = predictions, aes(bmi, coxfit.cat.fit, fill = bmi.max.cat)) +
 ## ----------
 ## Weighted Cox PH model, continuous BMI
 ## Fit the model
-coxfit.cont = svycoxph(Surv(age.years, mort.censored) ~
+coxfit.cont = svycoxph(Surv(age.years, mort.2006.c) ~
 					   	sex + race.ethnicity + education + 
-					   	## NB Which coefficients are SS depends on whether we center! 
 					   	bmi * bmi.max,
-					   	#I(bmi - 22) * I(bmi.max - 22), 
-					   design = design)
+					   	#I(bmi - 18) * I(bmi.max - 18), 
+					   design = design.2006)
 summary(coxfit.cont)
 
 ## Make predictions
-coxfit.cont.pred = predict(coxfit.cont, predictions, type = 'risk', se.fit = TRUE)
+coxfit.cont.pred = predict(coxfit.cont, predictions, type = 'lp', se.fit = TRUE)
+## Set the first entry (19 BMI, 19 max BMI) to 1
+coxfit.cont.ref = coxfit.cont.pred$fit[1]
 predictions = predictions %>% mutate(
-	coxfit.cont.fit = coxfit.cont.pred$fit,
-	coxfit.cont.se = coxfit.cont.pred$se.fit)
+	coxfit.cont.fit = exp(coxfit.cont.pred$fit - coxfit.cont.ref), 
+	coxfit.cont.025 = coxfit.cont.fit / exp(1.96 * coxfit.cont.se),
+	coxfit.cont.975 = coxfit.cont.fit * exp(1.96 * coxfit.cont.se))
 
 ## Plot predictions
 ## Points at bmi x bmi.max; PH by color w/ contours and labels
 plot = ggplot(data = predictions, aes(bmi, bmi.max, z = coxfit.cont.fit)) + 
-	geom_contour(aes(color = ..level..), breaks = c(1, 1.1, 1.25, 1.5, 1.75, 2, 3)) +
+	geom_contour(aes(color = ..level..)) +
 	geom_point(aes(color = coxfit.cont.fit), alpha = .1) +
 	#geom_raster(aes(color = coxfit.cont.fit)) +
 	# scale_fill_gradient(limits = c(0, 3), low = 'yellow', high = 'red', 
 	# 					name = 'relative hazard') +
-	scale_color_gradient(limits = c(1, 3), low = 'blue', high = 'red', 
+	scale_color_gradient(limits = c(0, 2), low = 'blue', high = 'red',
 						 name = 'relative hazard') +
 	geom_vline(xintercept = bmi_breaks, color = 'grey') +
 	geom_hline(yintercept = bmi_breaks, color = 'grey') +
@@ -264,10 +266,10 @@ directlabels::direct.label(plot, method = 'bottom.pieces', debug = FALSE)
 {ggplot(data = filter(predictions, bmi.max <= 45),
 		aes(bmi, coxfit.cont.fit)) + 
 	## Prediction uncertainty ribbon
-	geom_ribbon(aes(ymin = coxfit.cont.fit - 2*coxfit.cont.se,
-					ymax = coxfit.cont.fit + 2*coxfit.cont.se,
-					fill = bmi.max, group = bmi.max), alpha = .05) +
-	geom_line(aes(color = bmi.max, group = bmi.max), size = 1) + 
+	geom_ribbon(aes(ymin = coxfit.cont.025,
+					ymax = coxfit.cont.975,
+					fill = bmi.max, group = bmi.max), alpha = .02) +
+	geom_line(aes(color = bmi.max, group = bmi.max), size = 1, alpha = .5) + 
 	geom_vline(xintercept = bmi_breaks, alpha = .25) +
 	geom_hline(yintercept = 1) +
 	scale_color_continuous(low = 'blue', high = 'red',
