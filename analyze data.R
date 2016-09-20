@@ -277,55 +277,80 @@ directlabels::direct.label(plot, method = 'bottom.pieces', debug = FALSE)
 	scale_fill_continuous(low = 'blue', high = 'red',
 						  limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
 	ylab('relative hazard') +
-	coord_flip()} %>%
+	coord_flip(ylim = c(.5, 2))} %>%
 	directlabels::direct.label('top.points', debug = FALSE)
 
-
+## ----------
+## Weighted Cox PH model, continuous BMI, with splines on the BMI terms
+## Fit the model
+coxfit.spline = svycoxph(Surv(age.years, mort.2006.c) ~
+					   	sex + race.ethnicity + education + 
+					   	pspline(bmi * bmi.max),
+					   #I(bmi - 18) * I(bmi.max - 18), 
+					   design = design.2006)
+summary(coxfit.spline)
 
 ## Make predictions
-# coxfit.cont.pred = predict(coxfit.cont, design$variables, type = 'risk', se.fit = TRUE)
-# design = update(design, coxfit.cont.fit = coxfit.cont.pred$fit, 
-# 				coxfit.cont.se = coxfit.cont.pred$se.fit)
-# ## Plot predictions
-# ggplot(data = design$variables, aes(bmi, coxfit.cont.fit, color = sex, fill = sex)) + 
-# 	#geom_ribbon(aes(ymin = coxfit.cont.fit - 2*coxfit.cont.se, ymax = coxfit.cont.fit + 2*coxfit.cont.se), alpha = .25) +
-# 	geom_segment(aes(x = bmi, xend = bmi,
-# 					 y = coxfit.cont.fit + qnorm(.025) * coxfit.cont.se,
-# 					 yend = coxfit.cont.fit + qnorm(.975) * coxfit.cont.se),
-# 				 alpha = .5) +
-# 	geom_smooth(aes(linetype = sex), color = 'black', se = FALSE,
-# 				method.args = list(degree = 0)) +
-# 	#stat_summary(fun.y = mean, aes(linetype = sex), color = 'black', geom = 'line') +
-# 	#geom_point(alpha = .25) +
-# 	geom_vline(xintercept = bmi_breaks, color = 'black') +
-# 	geom_hline(yintercept = 1) +
-# 	#facet_grid(education ~ race.ethnicity) + 
-# 	ylab('proportional hazard') + 
-# 	coord_cartesian(xlim = c(18.5, 50), ylim = c(0, 3))
-# 
-# ggplot(data = design$variables, aes(x = bmi, y = bmi.max, z = coxfit.cont.fit)) +
+coxfit.spline.pred = predict(coxfit.spline, predictions, type = 'risk', se.fit = TRUE)
+## Set the first entry (19 BMI, 19 max BMI) to 1
+coxfit.spline.ref = coxfit.spline.pred$fit[1]
+predictions = predictions %>% mutate(
+	coxfit.spline.fit = exp(coxfit.spline.pred$fit - coxfit.spline.ref), 
+	coxfit.spline.025 = coxfit.spline.fit / exp(1.96 * coxfit.spline.se),
+	coxfit.spline.975 = coxfit.spline.fit * exp(1.96 * coxfit.spline.se))
+
+## Plot predictions
+## Points at bmi x bmi.max; PH by color w/ contours and labels
+plot = ggplot(data = predictions, aes(bmi, bmi.max, z = coxfit.spline.fit)) + 
+	geom_contour(aes(color = ..level..)) +
+	geom_point(aes(color = coxfit.spline.fit), alpha = .1) +
+	#geom_raster(aes(color = coxfit.spline.fit)) +
+	# scale_fill_gradient(limits = c(0, 3), low = 'yellow', high = 'red', 
+	# 					name = 'relative hazard') +
+	scale_color_gradient(limits = c(0, 2), low = 'blue', high = 'red',
+						 name = 'relative hazard') +
+	geom_vline(xintercept = bmi_breaks, color = 'grey') +
+	geom_hline(yintercept = bmi_breaks, color = 'grey') +
+	stat_function(fun = function (x) {x}, color = 'grey') +
+	coord_cartesian(xlim = c(18.5, 45), ylim = c(18.5, 45))
+directlabels::direct.label(plot, method = 'bottom.pieces', debug = FALSE)
+
+## PH x bmi; bmi.max by colored curves; w/ confidence intervals
+{ggplot(data = filter(predictions, bmi.max <= 45),
+		aes(bmi, coxfit.spline.fit)) + 
+	## Prediction uncertainty ribbon
+	geom_ribbon(aes(ymin = coxfit.spline.025,
+					ymax = coxfit.spline.975,
+					fill = bmi.max, group = bmi.max), alpha = .02) +
+	geom_line(aes(color = bmi.max, group = bmi.max), size = 1, alpha = .5) + 
+	geom_vline(xintercept = bmi_breaks, alpha = .25) +
+	geom_hline(yintercept = 1) +
+	scale_color_continuous(low = 'blue', high = 'red',
+						   limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
+	scale_fill_continuous(low = 'blue', high = 'red',
+						  limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
+	ylab('relative hazard') +
+	coord_flip(ylim = c(0.5,2))} %>%
+	directlabels::direct.label('top.points', debug = FALSE)
+
+## Compare continuous and continuous-spline predictions
+ggplot(predictions, aes(coxfit.cont.fit, coxfit.spline.fit)) + 
+	geom_point(aes(color = bmi)) + 
+	# geom_smooth(method = 'lm', color = 'red') +
+	stat_function(fun = function (x) x)
+
+## ----------
+## Compare categorical and continuous Cox PH predictions
+# ggplot(data = predictions, aes(x = bmi, y = bmi.max, 
+# 									z = coxfit.cont.fit - coxfit.cat.fit)) +
 # 	geom_vline(xintercept = bmi_breaks, alpha = .1) +
 # 	geom_hline(yintercept = bmi_breaks, alpha = .1) +
 # 	#geom_point(aes(color = coxfit.cont.fit)) +
 # 	#scale_color_gradient(limits = c(0, 4), low = 'blue', high = 'red') +
-# 	stat_summary_hex(fun = mean, bins = 70) +
-# 	scale_fill_gradient(limits = c(0,4), low = 'blue', high = 'red') +
-# 	facet_grid(education ~ race.ethnicity) +
+# 	stat_summary_2d(fun = mean, bins = 70) +
+# 	scale_fill_gradient2(limits = c(-3, 3), low = 'blue', mid = 'yellow', high = 'red') +
+# 	# facet_grid(education ~ race.ethnicity) +
 # 	coord_cartesian(xlim = c(18.5, 50), ylim = c(18.5, 50))
-
-
-## ----------
-## Compare categorical and continuous Cox PH predictions
-ggplot(data = predictions, aes(x = bmi, y = bmi.max, 
-									z = coxfit.cont.fit - coxfit.cat.fit)) +
-	geom_vline(xintercept = bmi_breaks, alpha = .1) +
-	geom_hline(yintercept = bmi_breaks, alpha = .1) +
-	#geom_point(aes(color = coxfit.cont.fit)) +
-	#scale_color_gradient(limits = c(0, 4), low = 'blue', high = 'red') +
-	stat_summary_2d(fun = mean, bins = 70) +
-	scale_fill_gradient2(limits = c(-3, 3), low = 'blue', mid = 'yellow', high = 'red') +
-	# facet_grid(education ~ race.ethnicity) +
-	coord_cartesian(xlim = c(18.5, 50), ylim = c(18.5, 50))
 
 
 ## ----------
