@@ -20,12 +20,12 @@ suffixes = c('', '_B', '_C')
 ##	2: Female [sic]
 ## RIDAGEEX:Best age in months at date of examination for individuals under 80 years of age at the time of MEC exam.
 ##	NB It's not clear whether Stokes 2014 used age in months or integer years
-## RIDRETH2:Linked NH3 Race/Ethnicity
-##	1: Non-Hispanic White
-##	2: Non-Hispanic Black
-##	3: Mexican American
-## 	4: Other Race - Including Multi-Racial
-##	5: Other Hispanic
+## RIDRETH1:Race/Ethnicity
+##  1:	Mexican American
+##  2:	Other Hispanic
+##	3:	Non-Hispanic White
+##	4:	Non-Hispanic Black
+##	5:	Other Rce - Including Multi-Racial
 ## DMDEDUC2:Education Level - Adults 20+
 ##	NB It's not clear which variable Stokes 2014 used to control for education
 ##	1:	Less than 9th Grade
@@ -54,11 +54,11 @@ for (file in files) {
 				  age.months = RIDAGEEX,
 				  age.years = age.months %/% 12,
 				  race.ethnicity = factor(RIDRETH1, 
-				  						labels = c('Non-Hispanic White',
+				  						labels = c('Hispanic',
+				  								   'Hispanic', 
+				  								   'Non-Hispanic White', 
 				  								   'Non-Hispanic Black', 
-				  								   'Mexican American', 
-				  								   'Other, Multiracial',
-				  								   'Other Hispanic')),
+				  								   'Non-Hispanic Other')),
 				  education = factor(DMDEDUC2, 
 				  				   labels = c('Less than High School', 
 				  				   		   		'Some High School', 
@@ -84,7 +84,7 @@ for (file in files) {
 	data_demo = rbind(data_demo, readdata)
 }
 data_demo$race.ethnicity = relevel(data_demo$race.ethnicity, 'Non-Hispanic White')
-data_demo$education = C(data_demo$education, treatment, base = 3)
+data_demo$education = relevel(data_demo$education, 'High School')
 
 
 ## Smoking Data
@@ -171,11 +171,11 @@ files = paste('mortality 2006/NHANES',
 			  '_MORT_PUBLIC_USE_2010.DAT', sep = '')
 data_mort_2006 = data.frame(id = c(), mort.status = c())
 for (file in files) {
-	data_mort_temp = read_fwf(file,  n_max = -1,
-							  fwf_positions(c(1, 7, 13, 17),
-							  			    c(5, 7, 15, 17),
+	data_mort_temp = read_fwf(file,  n_max = Inf,
+							  fwf_positions(c(1, 7, 13),
+							  			    c(5, 7, 15),
 							  			  col_names = c('id', 'mort.status', 
-							  			  			  'follow.months', 'dummy')), 
+							  			  			  'follow.months')), 
 							  na = c('.', ' ')) %>%
 		transmute(id = as.numeric(id),
 				  mort.2006 = factor(mort.status, labels = c('alive', 'deceased')), 
@@ -195,11 +195,11 @@ files = paste('mortality/NHANES_',
 			  '_MORT_2011_PUBLIC.dat', sep = '')
 data_mort_2011 = data.frame(id = c(), mort.status = c())
 for (file in files) {
-	data_mort_temp = read_fwf(file,  n_max = -1,
-			 fwf_positions(c(1, 16, 47, 17),
-			 			   c(5, 16, 49, 17),
+	data_mort_temp = read_fwf(file,  n_max = Inf,
+			 fwf_positions(c(1, 16, 47),
+			 			   c(5, 16, 49),
 			 			  col_names = c('id', 'mort.status', 
-			 			  			    'follow.months', 'dummy'))
+			 			  			    'follow.months'))
 			) %>%
 	transmute(id = as.numeric(id),
 			  mort.2011 = factor(mort.status, labels = c('alive', 'deceased')),
@@ -209,13 +209,13 @@ for (file in files) {
 data_mort = full_join(data_mort_2006, data_mort_2011, by = 'id')
 
 ## Catch duplicate mortality results
-# data_mort = data_mort %>% 
-# 	dcast(id + follow.months ~ mort.status) %>% 
-# 	mutate(mort.status = ifelse(!is.na(deceased), 
-# 								'deceased', 
+# data_mort = data_mort %>%
+# 	dcast(id + follow.months ~ mort.status) %>%
+# 	mutate(mort.status = ifelse(!is.na(deceased),
+# 								'deceased',
 # 								ifelse(!is.na(alive),
-# 									   'alive', 
-# 									   NA))) %>% 
+# 									   'alive',
+# 									   NA))) %>%
 # 	mutate(mort.status = as.factor(mort.status)) %>%
 # 	select(id, mort.status, follow.months)
 

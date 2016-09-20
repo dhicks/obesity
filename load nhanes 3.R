@@ -4,11 +4,6 @@ library(readr)
 "
 Variables of interest in `adult.dat`
 1-5:	SEQN, Respondent identification number
-15:		HSSEX, Sex
-	1: Male
-	2: Female
-1237-40:MXPAXTMR, Age in months at MEC exam
-1245-8: HXPAXTMR, Age in months at home exam
 13: DMARACER, Race
 	1: White
 	2: Black
@@ -18,15 +13,20 @@ Variables of interest in `adult.dat`
 	1: Mexican-American
 	2: Other Hispanic
 	3: Not Hispanic
+15:		HSSEX, Sex
+	1: Male
+	2: Female
+43:		SDPPSU6, Total NHANES III pseudo-PSU
+44-5:	SDPSTRA6, Total NHANES III pseudo-stratum
+61-9:	WTPFEX6, Total MEC-examined sample final weight
+70-8:	WTPFHX6, Final MEC+home examination weight
+1237-40:MXPAXTMR, Age in months at MEC exam
+1245-8: HXPAXTMR, Age in months at home exam
 1256-7:	HFA8R, Highest grade or yr of school completed
 	00: Never attended or kindergarten only
 	01-17
 	88: Blank but applicable
 	99: Don't know
-43:		SDPPSU6, Total NHANES III pseudo-PSU
-44-5:	SDPSTRA6, Total NHANES III pseudo-stratum
-61-9:	WTPFEX6, Total MEC-examined sample final weight
-70-8:	WTPFHX6, Final MEC+home examination weight
 1961-63:HAM10S, Up to present time,most ever weighed-lbs
 	888: Blank but applicable
 	999: Don't know
@@ -39,33 +39,12 @@ Variables of interest in `adult.dat`
 	8: Blank but applicable
 "
 
-system.time({
-	data_adult = read_fwf('NHANES III/adult.dat', n_max = -1, 
-						  fwf_positions(c(1, 15, 1237, 
-						  					1245,
-						  					13, 14, 
-						  					1256, 1961, 
-						  					2281, 2334, 
-						  					2330, 2311, 
-						  					43, 44, 70, 
-						  					1000), 
-						  				c(5, 15, 1240, 
-						  				  	1248, 
-						  				  	13, 14, 
-						  				  	1257, 1963, 
-						  				  	2281, 2334, 
-						  				  	2330, 2311, 
-						  				  	43, 45, 78, 
-						  				  	1000), 
-						  				col_names = 
-						  					c('id', 'sex', 'age.mec', 
-						  					  'age.home',
-						  					  'race', 'ethnicity',
-						  					  'education.yrs', 'weight.max', 
-						  					  'cigarettes', 'pipe', 
-						  					  'cigars', 'chew', 
-						  					  'psu', 'stratum', 'sample.weight', 
-						  					  'dummy'))) %>%
+data_adult = read_fwf('NHANES III/adult.dat',
+	fwf_positions(c(1, 13, 14, 15, 43, 44, 70, 1237, 1245, 1256, 1961, 2281, 2311, 2330, 2334), 
+				  c(5, 13, 14, 15, 43, 45, 78, 1240, 1248, 1257, 1963, 2281, 2311, 2330, 2334), 
+				  col_names = c('id', 'race', 'ethnicity', 'sex', 'psu', 'stratum', 
+				  			  'sample.weight', 'age.mec', 'age.home', 'education.yrs', 
+				  			  'weight.max', 'cigarettes', 'chew', 'cigars', 'pipe'))) %>%
 		transmute(id = as.numeric(id), 
 				  sex = factor(sex, labels = c('male', 'female')),
 				  age.months = ifelse(!is.na(age.mec), 
@@ -85,7 +64,6 @@ system.time({
 				  psu = factor(paste('iii', psu)), 
 				  stratum = factor(paste('iii ', stratum)), 
 				  sample.weight = as.numeric(sample.weight))
-})
 
 data_adult$race.ethnicity = 
 	with(data_adult, 
@@ -93,20 +71,17 @@ data_adult$race.ethnicity =
 			   'Non-Hispanic White', 
 		ifelse(race == 'Black' & ethnicity == 'Not Hispanic', 
 			   'Non-Hispanic Black', 
-		ifelse(race == 'Mexican American' | ethnicity == 'Mexican American', 
-			   'Mexican American', 
-		ifelse(ethnicity == 'Other Hispanic', 
-			   'Other Hispanic', 
+		ifelse(race == 'Mexican American' | ethnicity == 'Mexican American' | ethnicity == 'Other Hispanic', 
+			   'Hispanic', 
 		ifelse(race == 'Other', 
-			   'Other, Multiracial', 
+			   'Non-Hispanic Other', 
 			   '???'
-		))))))
+		)))))
 data_adult$race.ethnicity = factor(data_adult$race.ethnicity,
 								   levels = c('Non-Hispanic White',
 								   		   'Non-Hispanic Black', 
-								   		   'Mexican American', 
-								   		   'Other, Multiracial',
-								   		   'Other Hispanic'))
+								   		   'Hispanic', 
+								   		   'Non-Hispanic Other'))
 data_adult = data_adult %>% select(-one_of('race', 'ethnicity'))
 
 code_ed.yrs = function (ed.yrs) {
@@ -168,21 +143,17 @@ Variables of interest in `exam.dat`
 	2: Interviewed, MEC-examined
 	3: Interviewed, home-examined
 "
-
-system.time({
-	data_exam = read_fwf('NHANES III/exam.dat', 
-						 fwf_positions(c(1, 11, 1508, 1528, 1524, 1533), 
-						 			  c(5,  11, 1513, 1532, 1527, 1533), 
-						 	col_names = c('id', 'mec.home', 
-						 				  'weight', 'height', 'bmi', 'dummy')),
-						 n_max = -1) %>%
-		transmute(id = as.numeric(id), 
-				  mec.home = factor(mec.home, levels = c(2,3), 
-				  				  labels = c('mec', 'home')),
-				  weight = as.numeric(weight), 
-				  height = as.numeric(height), 
-				  bmi = as.numeric(bmi))
-})
+data_exam = read_fwf('NHANES III/exam.dat', 
+					 fwf_positions(c(1, 11, 1508, 1524, 1528), 
+					 			  c(5,  11, 1513, 1527, 1532), 
+					 	col_names = c('id', 'mec.home', 
+					 				  'weight', 'bmi', 'height'))) %>%
+	transmute(id = as.numeric(id), 
+			  mec.home = factor(mec.home, levels = c(2,3), 
+			  				  labels = c('mec', 'home')),
+			  weight = as.numeric(weight), 
+			  height = as.numeric(height), 
+			  bmi = as.numeric(bmi))
 catch_errors_weight = function (x) {
 	if (x == 888888 | is.na(x)) {
 		return(NA)
@@ -220,12 +191,11 @@ data_exam$bmi = sapply(data_exam$bmi, catch_errors_bmi)
 ## Col. 7: 		Final Mortality Status
 ## Col. 15-7:	Person Months of Follow-up from MEC/Home
 data_mort_2006 = read_fwf('mortality 2006/NHANES3_MORT_PUBLIC_USE_2010.DAT',  
-					  fwf_positions(c(1, 7, 15, 17),
-					  			    c(5, 7, 17, 17),
+					  fwf_positions(c(1, 7, 15),
+					  			    c(5, 7, 17),
 					  			  col_names = c('id', 'mort.status', 
-					  			  			  'follow.months', 'dummy')),
-					  na = c('.', ' '),
-					  n_max = -1) %>%
+					  			  			  'follow.months')),
+					  na = c('.', ' ')) %>%
 	transmute(id = as.numeric(id),
 			  mort.2006 = factor(mort.status, labels = c('alive', 'deceased')), 
 			  follow.months.2006 = as.numeric(follow.months))
@@ -236,12 +206,11 @@ data_mort_2006 = read_fwf('mortality 2006/NHANES3_MORT_PUBLIC_USE_2010.DAT',
 ##  Blank: Ineligible or under age 18
 ## Col. 47-9:	Person Months of Follow-up from MEC/Exam Date
 data_mort_2011 = read_fwf('mortality/NHANES_III_MORT_2011_PUBLIC.DAT', 
-						  fwf_positions(c(1, 16, 47, 50), 
-						  				c(5, 16, 49, 50), 
+						  fwf_positions(c(1, 16, 47), 
+						  				c(5, 16, 49), 
 						  				col_names = c('id', 'mort.status', 
-						  							  'follow.months', 'dummy')), 
-						  na = c('.', ' '),
-						  n_max = -1) %>%
+						  							  'follow.months')), 
+						  na = c('.', ' ')) %>%
 	transmute(id = as.numeric(id), 
 			  mort.2011 = factor(mort.status, labels = c('alive', 'deceased')), 
 			  follow.months.2011 = as.numeric(follow.months))
