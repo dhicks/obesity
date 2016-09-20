@@ -4,7 +4,7 @@ library(dplyr)
 library(knitr)
 library(mgcv)
 library(survey)
-load('2016-08-11.RData')
+load('2016-09-20.RData')
 
 # bmi_breaks = c(18.5, 25, 30, 35, Inf)
 # names(bmi_breaks) = c('underweight', 'normal', 'overweight', 'obese I', 'obese II')
@@ -21,27 +21,28 @@ dataf = dataf %>%
 			##  censored followup months
 			follow.months.2006.c = age.follow.2006.c - age.months,
 			## censored mortality
-			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006 , NA), 
-			#mort.2011.c = ifelse(age.months + follow.months.2011 < 85*12, mort.2011, NA),
+			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006, NA), 
+			mort.2011.c = ifelse(age.months + follow.months.2011 < 85*12, mort.2011, NA),
 			## Interaction term between categorical BMI variables
-			bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
+			bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE), 
+			## For cross-referencing, number the rows in the master dataset
+			row.num = row_number())
 dataf.2006 = subset(dataf, (!smoker) & (age.months >= 50*12) & 
 					  	(age.months < 85*12) & 
 					  	(follow.months.2006 > 0) &
 					  	(bmi.cat != 'underweight') & 
 					  	(bmi < 75) & (bmi.max < 75) &
 					  	!is.na(bmi) & !is.na(bmi.max) & 
-					  	!is.na(education) #& !is.na(mort.2006.c)
-					)
+					  	!is.na(education) & !is.na(mort.2006))
 dataf.2011 = subset(dataf, (!smoker) & (age.months >= 50*12) & 
 						(age.months < 85*12) & 
 						(follow.months.2011 > 0) &
 						(bmi.cat != 'underweight') & 
 						(bmi < 75) & (bmi.max < 75) &
 						!is.na(bmi) & !is.na(bmi.max) & 
-						!is.na(education) & !is.na(mort.2011.c))
+						!is.na(education) & !is.na(mort.2011))
 ## These samples are exactly the same individuals
-# table(dataf.2006$id == dataf.2011$id)
+# table(dataf.2006$row.num == dataf.2011$row.num)
 ## There are some individuals who are in the 2006 followup but not in 2011
 ## But they were all 17-22 years old and in NHANES 3
 # dataf %>% filter(!is.na(mort.2006), is.na(mort.2011)) %>% .$age.years %>% summary
@@ -54,22 +55,10 @@ dataf.2011 %>% select(age.years, education, race.ethnicity, bmi, bmi.max,
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
 				   nest = TRUE, 
 				   data = dataf)
-## Filtered dataset: nonsmokers, 50-84 years old, not underweight, 
-##   mortality followup as of December 31, 2006
-design.2006 = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
-					(age.months < 85*12) & 
-					(follow.months.2006 > 0) &
-					(bmi.cat != 'underweight') & 
-					(bmi < 75) & (bmi.max < 75) &
-					!is.na(bmi) & !is.na(bmi.max) & 
-					!is.na(education) & !is.na(mort.2006.c))
-design.2011 = subset(design_unfltd, (!smoker) & (age.months >= 50*12) & 
-					 	(age.months < 85*12) & 
-					 	(follow.months.2011 > 0) &
-					 	(bmi.cat != 'underweight') & 
-					 	(bmi < 75) & (bmi.max < 75) &
-					 	!is.na(bmi) & !is.na(bmi.max) & 
-					 	!is.na(education) & !is.na(mort.2011.c))
+## Filtered datasets
+design.2006 = subset(design_unfltd, row.num %in% dataf.2006$row.num)
+design.2011 = subset(design_unfltd, row.num %in% dataf.2011$row.num)
+
 ## Build interaction term
 design.2006 = update(design.2006, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
 design.2011 = update(design.2011, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
