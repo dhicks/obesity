@@ -14,15 +14,18 @@ dataf = dataf %>%
 		filter(!is.na(id), sample.weight > 0) %>%
 		mutate(
 			## Censor mortality at the 85-years-old cutoff: 
-			##  actually age at followup
+			##  actual age at followup
 			age.follow.2006 = age.months + follow.months.2006,
+			age.follow.2011 = age.months + follow.months.2011,
 			##  censor at 85 years old
 			age.follow.2006.c = pmin(age.follow.2006, 85*12-1),
+			age.follow.2011.c = pmin(age.follow.2011, 85*12-1),
 			##  censored followup months
 			follow.months.2006.c = age.follow.2006.c - age.months,
+			follow.months.2011.c = age.follow.2011.c - age.months,
 			## censored mortality
-			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006, NA), 
-			mort.2011.c = ifelse(age.months + follow.months.2011 < 85*12, mort.2011, NA),
+			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006, 3), 
+			mort.2011.c = ifelse(age.follow.2011 < 85*12, mort.2011, 3),
 			## Interaction term between categorical BMI variables
 			bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE), 
 			## For cross-referencing, number the rows in the master dataset
@@ -137,7 +140,8 @@ predictions$bmi.cat.inter = with(predictions,
 ## ----------
 ## Weighted Cox PH model, categorical BMI
 ## Fit the model
-coxfit.cat.2006 = svycoxph(Surv(age.years, mort.2006.c) ~ 
+coxfit.cat.2006 = svycoxph(Surv(age.months, age.follow.2006.c, mort.2006.c, 
+								type = 'interval2') ~ 
 				  			sex + race.ethnicity + education +
 				  			bmi.cat.inter, 
 						   design = design.2006)
@@ -254,14 +258,31 @@ coxfit.cont = svycoxph(Surv(age.years, mort.2006.c) ~
 					   design = design.2006)
 summary(coxfit.cont)
 
+km.obs = svykm(Surv(age.years, mort.2006.c) ~ 1, 
+			   design = design.2006, se = FALSE)
+km.model = survfit(coxfit.cont, se.fit = TRUE)
+kms = data.frame(
+		age = km.obs$time[-1],
+		obs = km.obs$surv[-1],
+		model.pe = km.model$surv,
+		model.upper = km.model$upper, 
+		model.lower = km.model$lower)
+ggplot(kms) + 
+	geom_line(aes(age, obs), color = 'black') +
+	geom_line(aes(age, model.pe), color = 'red') +
+	geom_ribbon(aes(age, ymin = model.lower, ymax = model.upper), fill = 'red', 
+				alpha = .25)
+
+		
+	
 ## Make predictions
 coxfit.cont.pred = predict(coxfit.cont, predictions, type = 'lp', se.fit = TRUE)
 ## Set the first entry (19 BMI, 19 max BMI) to 1
 coxfit.cont.ref = coxfit.cont.pred$fit[1]
 predictions = predictions %>% mutate(
 	coxfit.cont.fit = exp(coxfit.cont.pred$fit - coxfit.cont.ref), 
-	coxfit.cont.025 = coxfit.cont.fit / exp(1.96 * coxfit.cont.se),
-	coxfit.cont.975 = coxfit.cont.fit * exp(1.96 * coxfit.cont.se))
+	coxfit.cont.025 = coxfit.cont.fit / exp(1.96 * coxfit.cont.pred$se),
+	coxfit.cont.975 = coxfit.cont.fit * exp(1.96 * coxfit.cont.pred$se))
 
 ## Plot predictions
 ## Points at bmi x bmi.max; PH by color w/ contours and labels
@@ -293,9 +314,10 @@ directlabels::direct.label(plot, method = 'bottom.pieces', debug = FALSE)
 						   limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
 	scale_fill_continuous(low = 'blue', high = 'red',
 						  limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
-	ylab('relative hazard') +
-	coord_flip(ylim = c(.5, 2))} %>%
-	directlabels::direct.label('top.points', debug = FALSE)
+	ylab('relative risk') #+
+	#coord_flip(ylim = c(.5, 2))
+	} %>%
+	directlabels::direct.label('last.points', debug = FALSE)
 
 ## ----------
 ## Weighted Cox PH model, continuous BMI, with splines on the BMI terms
@@ -313,8 +335,8 @@ coxfit.spline.pred = predict(coxfit.spline, predictions, type = 'risk', se.fit =
 coxfit.spline.ref = coxfit.spline.pred$fit[1]
 predictions = predictions %>% mutate(
 	coxfit.spline.fit = exp(coxfit.spline.pred$fit - coxfit.spline.ref), 
-	coxfit.spline.025 = coxfit.spline.fit / exp(1.96 * coxfit.spline.se),
-	coxfit.spline.975 = coxfit.spline.fit * exp(1.96 * coxfit.spline.se))
+	coxfit.spline.025 = coxfit.spline.fit / exp(1.96 * coxfit.spline.pred$se),
+	coxfit.spline.975 = coxfit.spline.fit * exp(1.96 * coxfit.spline.pred$se))
 
 ## Plot predictions
 ## Points at bmi x bmi.max; PH by color w/ contours and labels
@@ -346,9 +368,10 @@ directlabels::direct.label(plot, method = 'bottom.pieces', debug = FALSE)
 						   limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
 	scale_fill_continuous(low = 'blue', high = 'red',
 						  limits = c(18.5, 45), breaks = c(18.5, 25, 30, 35)) +
-	ylab('relative hazard') +
-	coord_flip(ylim = c(0.5,2))} %>%
-	directlabels::direct.label('top.points', debug = FALSE)
+	ylab('relative risk') +
+	coord_cartesian(ylim = c(0.5,2))
+	} %>%
+	directlabels::direct.label('last.points', debug = FALSE)
 
 ## Compare continuous and continuous-spline predictions
 ggplot(predictions, aes(coxfit.cont.fit, coxfit.spline.fit)) + 
