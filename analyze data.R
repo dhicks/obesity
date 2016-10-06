@@ -64,6 +64,23 @@ design.2006 = update(design.2006, bmi.cat.inter = interaction(bmi.max.cat, bmi.c
 design.2011 = update(design.2011, bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE))
 
 ## ----------
+## For some whole-population plots
+dataf.adult = dataf %>% filter(age.years >= 18, nhanes.cycle > 0)
+design.adult = subset(design_unfltd, row.num %in% dataf.adult$row.num)
+## KDE of BMI
+ggplot(data = {svysmooth( ~ bmi, design.adult)$bmi %>% as.data.frame}, 
+	   aes(x, y)) + 
+	# geom_line(color = 'blue') +
+	geom_ribbon(aes(ymin = 0, ymax = y), fill = 'blue', alpha = .5) +
+	geom_vline(xintercept = bmi_breaks, alpha = .5) +
+	xlab('BMI') + scale_y_continuous(breaks = NULL, name = '')
+
+## 1 - CDF at some BMI values of interest
+cdf = svycdf(~ bmi, design.adult)$bmi
+1 - cdf(c(38, 45))
+cdf(bmi_breaks) %>% diff
+
+## ----------
 ## Stokes' results
 stokes = data.frame(
 	term = c('overweight.normal', 'overweight.overweight', 
