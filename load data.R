@@ -52,7 +52,7 @@ for (file in files) {
 		transmute(id = SEQN, 
 				  sex = factor(RIAGENDR, labels = c('male', 'female')),
 				  age.months = RIDAGEEX,
-				  age.years = age.months %/% 12,
+				  age.years = (age.months - 12) %/% 12,
 				  race.ethnicity = factor(RIDRETH1, 
 				  						labels = c('Hispanic',
 				  								   'Hispanic', 
