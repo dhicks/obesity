@@ -7,13 +7,16 @@
 #' We first load several required `R` packages and previously cleaned data.  Data come from NHANES III and continuous NHANES (cycles 1-3, 1999-2004), and followup mortality data from 2006 and 2011.  The model below uses only 2006 mortality data.  
 
 #+ setup, message=FALSE, warning=FALSE
+## tidyverse
 library(tidyverse)
 library(cowplot)
 library(broom)
-library(survey)
-library(survival)
 library(stringr)
 library(purrr)
+## complex survey designs + survival analysis
+library(survival)
+library(survey)
+## spline models
 library(splines)
 
 load('2016-10-06.RData')
@@ -77,16 +80,17 @@ fit_model = function (design, variable, specification) {
 	var = switch(variable, 
 				 'binned' = 'bmi.cat',
 				 'continuous' = 'bmi',
-				 'spline' = 'ns(bmi, df = 4)')
+				 '4-spline' = 'ns(bmi, df = 5)', 
+				 '6-spline' = 'ns(bmi, df = 7)')
 	if (specification == 'cox') {
 		rhs = str_c(var, ' + sex + race.ethnicity + education')
 	} else {
-		rhs = str_c(var, ' + age.years + sex + race.ethnicity + education')
+		rhs = str_c(var, ' + age.follow.c + sex + race.ethnicity + education')
 	}
 	
 	
 	response = switch(specification, 
-					  'cox' = 'Surv(age.years, mort.c)',
+					  'cox' = 'Surv(age.follow.c, mort.c)',
 					  'logistic' = 'mort.c',
 					  'cloglog' = 'mort.c')
 	form = str_c(response, ' ~ ', rhs)
@@ -108,8 +112,8 @@ fit_model = function (design, variable, specification) {
 	# eval(parse(text = expr))
 }
 
-models_df = cross_d(list('variable' = c('binned', 'continuous', 'spline'),
-							# '4-spline', '6-spline'),
+models_df = cross_d(list('variable' = c('binned', 'continuous', 
+							'4-spline', '6-spline'),
 	   'specification' = c('cox', 'logistic', 'cloglog'))) %>%
 	mutate(model_id = row_number()) %>%
 	select(model_id, everything()) %>%
@@ -134,6 +138,14 @@ coefs %>%
 			   linetype = specification, shape = specification)) + 
 	# geom_point(position = position_dodge(width = .25)) +
 	geom_pointrange(aes(ymin = conf.low.calc, ymax = conf.high.calc), 
+					position = position_dodge(width = .5)) +
+	coord_flip()
+
+coefs %>%
+	filter(!str_detect(term, 'bmi')) %>%
+	ggplot(aes(term, estimate, color = variable, 
+			   linetype = specification, shape = specification)) +
+	geom_pointrange(aes(ymin = conf.low.calc, ymax = conf.high.calc),
 					position = position_dodge(width = .5)) +
 	coord_flip()
 
@@ -175,7 +187,7 @@ aug %>%
 ## Initialize a data frame to hold the predictions
 predictions = expand.grid(
 	bmi = 16:45, 
-	age.years = svymean(~ age.years, design)[1],
+	age.follow.c = svymean(~ age.follow.c, design)[1],
 	sex = factor('female', levels = levels(dataf$sex)),
 	race.ethnicity = factor('Non-Hispanic White', 
 							levels = levels(dataf$race.ethnicity)), 
@@ -222,14 +234,14 @@ ggplot(predictions, aes(bmi, risk_rel,
 						linetype = specification)) + 
 	geom_hline(yintercept = 1) +
 	geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
-				alpha = .1) +
+				alpha = .25) +
 	geom_line(aes(color = variable), size = 1) +
 	geom_point(x = mean(c(bmi_breaks['normal'], bmi_breaks['underweight'])), 
 			   y = 1) +
 	scale_x_continuous(breaks = bmi_breaks, 
 					   labels = bmi_breaks) +
 	geom_vline(xintercept = bmi_breaks[2:5], alpha = .1) +
-	coord_cartesian(ylim = c(0, 3)) +
+	coord_cartesian(ylim = c(0, 2)) +
 	facet_grid(~ variable)
 
 ## ----------------------------------------
