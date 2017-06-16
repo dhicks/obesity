@@ -1,10 +1,11 @@
 ---
-title: Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004
+title: "Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004"
+output: pdf_document
 ---
 
-We first load several required `R` packages and pre-parsed data.  Data come from NHANES III and continuous NHANES (cycles 1-3, 1999-2004), and followup mortality data from 2006 and 2011.  The model below uses only 2006 mortality data.  
+We first load several required `R` packages and previously cleaned data.  Data come from NHANES III and continuous NHANES (cycles 1-3, 1999-2004), and followup mortality data from 2006 and 2011.  The model below uses only 2006 mortality data.  
 
-```{r setup}
+```{r setup, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(cowplot)
 library(broom)
@@ -18,23 +19,27 @@ load('2016-10-06.RData')
 We will examine only individuals at least 50 years old and less than 70 years old.  We censor mortality data for individuals who are 70 years old or more.   
 
 ```{r}
+age_cutoff = 70
+
+## Age variables are measured in months
+
 dataf = dataf %>% 
 	## Drop entries with NA id or 0 sample weight
 	filter(!is.na(id), sample.weight > 0) %>%
 	mutate(
-		## Censor mortality at the 85-years-old cutoff: 
+		## Censor mortality at the 70-years-old cutoff: 
 		##  actual age at followup
 		age.follow.2006 = age.months + follow.months.2006,
 		age.follow.2011 = age.months + follow.months.2011,
-		##  censor at 85 years old
-		age.follow.2006.c = pmin(age.follow.2006, 70*12+11),
-		age.follow.2011.c = pmin(age.follow.2011, 70*12+11),
+		##  censor at 70 years old
+		age.follow.2006.c = pmin(age.follow.2006, age_cutoff*12+11),
+		age.follow.2011.c = pmin(age.follow.2011, age_cutoff*12+11),
 		##  censored followup months
 		follow.months.2006.c = age.follow.2006.c - age.months,
 		follow.months.2011.c = age.follow.2011.c - age.months,
 		## censored mortality
-		mort.2006.c = ifelse(age.follow.2006 <= 70*12+11, mort.2006, NA), 
-		mort.2011.c = ifelse(age.follow.2011 <= 70*12+11, mort.2011, NA),
+		mort.2006.c = ifelse(age.follow.2006 <= age_cutoff*12+11, mort.2006, NA), 
+		mort.2011.c = ifelse(age.follow.2011 <= age_cutoff*12+11, mort.2011, NA),
 		## For cross-referencing, number the rows in the master dataset
 		row.num = row_number())
 ```
@@ -46,11 +51,11 @@ We filter based on the following criteria:
 - Followup time greater than 0 months
 - Data available on BMI status, education, and mortality
 
-After filtering, we move to a complex survey design object.
+After filtering, we move to a complex survey design object, which ensures that models properly take into account NHANES' stratified sampling design.
 
 ```{r}
 dataf.2006 = subset(dataf, (!smoker) & (age.months >= 50*12 + 12) & 
-						(age.months < 70*12 + 12) & 
+						(age.months < age_cutoff*12 + 12) & 
 						(follow.months.2006 > 0) &
 						# (bmi.cat != 'underweight') & 
 						(bmi < 75) & (bmi.max < 75) &
@@ -83,9 +88,12 @@ summary(coxfit.cat)
 To graphically check model fit, we compare Kaplan-Meier estimates derived from the data themselves (black) and the fitted Cox PH model (red; 95% confidence interval indicated by red shading).  There appears to be somewhat good agreement between the curve estimates, although there is almost total uncertainty about the Cox PH model's estimate at the high end of the age range.  
 
 ```{r}
+## Observed Kaplan-Meyer curve
 km.obs = svykm(Surv(age.years, mort.2006.c) ~ 1, 
 			   design = design.2006, se = FALSE)
+## Kaplan-Meyer curve predicted from the model
 km.model = survfit(coxfit.cat, se.fit = TRUE)
+## Combine the two and plot
 kms = data.frame(
 	age = km.obs$time[-1],
 	obs = km.obs$surv[-1],
@@ -100,7 +108,7 @@ kms.plot = ggplot(kms) +
 kms.plot
 ```
 
-We also plot deviance residuals against (a) the model's predictions, to check for outliers and heteroscedasticity; and (b) the model's age, to check the proportional hazards assumption.  LOESS curves are used to check independence; these curves should be flat.  There are no obvious outliers, and the residuals appear to be homoscedastic; there is a slight bend in the LOESS curve above about 62 years old.  
+We also plot deviance residuals against (a) the model's predictions, to check for outliers and heteroscedasticity; and (b) subjects age, to check the proportional hazards assumption.  LOESS curves are used to check independence; these curves should be flat.  There are no obvious outliers, and the residuals appear to be homoscedastic; there is a slight bend in the LOESS curve above about 62 years old.  
 
 ```{r}
 res.df = data.frame(
