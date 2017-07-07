@@ -24,8 +24,8 @@ dataf = dataf %>%
 			follow.months.2006.c = age.follow.2006.c - age.months,
 			follow.months.2011.c = age.follow.2011.c - age.months,
 			## censored mortality
-			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006, 3), 
-			mort.2011.c = ifelse(age.follow.2011 < 85*12, mort.2011, 3),
+			mort.2006.c = ifelse(age.follow.2006 < 85*12, mort.2006, 1), 
+			mort.2011.c = ifelse(age.follow.2011 < 85*12, mort.2011, 1),
 			## Interaction term between categorical BMI variables
 			bmi.cat.inter = interaction(bmi.max.cat, bmi.cat, drop = TRUE), 
 			## For cross-referencing, number the rows in the master dataset
@@ -50,12 +50,14 @@ dataf.2011 = subset(dataf, (!smoker) & (age.months >= 50*12) &
 ## But they were all 17-22 years old and in NHANES 3
 # dataf %>% filter(!is.na(mort.2006), is.na(mort.2011)) %>% .$age.years %>% summary
 
-dataf.2011 %>% select(age.years, education, race.ethnicity, bmi, bmi.max, 
-						bmi.cat, bmi.max.cat, bmi.cat.inter,
-						mort.2006.c, mort.2011.c) %>% 
+dataf.2011 %>% 
+	select(age.years, education, race.ethnicity, bmi, bmi.max, 
+		   bmi.cat, bmi.max.cat, bmi.cat.inter,
+		   mort.2006.c, mort.2011.c) %>% 
 	summary
 ## Move to a survey design object
-design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, weights = ~ sample.weight, 
+design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, 
+						  weights = ~ sample.weight, 
 				   nest = TRUE, 
 				   data = dataf)
 ## Filtered datasets
@@ -68,7 +70,8 @@ design.2011 = update(design.2011, bmi.cat.inter = interaction(bmi.max.cat, bmi.c
 
 ## ----------
 ## For some whole-population plots
-dataf.adult = dataf %>% filter(age.years >= 18, nhanes.cycle > 0)
+dataf.adult = dataf %>% 
+	filter(age.years >= 18, nhanes.cycle > 0)
 design.adult = subset(design_unfltd, row.num %in% dataf.adult$row.num)
 ## KDE of BMI
 ggplot(data = {svysmooth( ~ bmi, design.adult)$bmi %>% as.data.frame}, 
@@ -81,7 +84,7 @@ ggplot(data = {svysmooth( ~ bmi, design.adult)$bmi %>% as.data.frame},
 ## 1 - CDF at some BMI values of interest
 cdf = svycdf(~ bmi, design.adult)$bmi
 1 - cdf(c(38, 45))
-cdf(bmi_breaks) %>% diff
+cdf(bmi_breaks) %>% diff()
 
 ## ----------
 ## Stokes' results
@@ -140,8 +143,7 @@ predictions$bmi.cat.inter = with(predictions,
 ## ----------
 ## Weighted Cox PH model, categorical BMI
 ## Fit the model
-coxfit.cat.2006 = svycoxph(Surv(age.months, age.follow.2006.c, mort.2006.c, 
-								type = 'interval2') ~ 
+coxfit.cat.2006 = svycoxph(Surv(age.years, mort.2006.c) ~ 
 				  			sex + race.ethnicity + education +
 				  			bmi.cat.inter, 
 						   design = design.2006)
@@ -324,7 +326,7 @@ directlabels::direct.label(plot, method = 'bottom.pieces', debug = FALSE)
 ## Fit the model
 coxfit.spline = svycoxph(Surv(age.years, mort.2006.c) ~
 					   	sex + race.ethnicity + education + 
-					   	pspline(bmi * bmi.max),
+					   	pspline(bmi * bmi.max, nterm = 4),
 					   #I(bmi - 18) * I(bmi.max - 18), 
 					   design = design.2006)
 summary(coxfit.spline)
@@ -395,9 +397,9 @@ ggplot(predictions, aes(coxfit.cont.fit, coxfit.spline.fit)) +
 
 ## ----------
 ## Weighted binomial regression, continuous BMI
-binomfit.cont = svyglm(mort.censored ~ age.years + sex + race.ethnicity + education +
+binomfit.cont = svyglm(I(mort.2006.c - 1) ~ age.years + sex + race.ethnicity + education +
 					   	bmi * bmi.max, 
-					   design = design, 
+					   design = design.2006, 
 					   family = quasibinomial())
 summary(binomfit.cont)
 ## Make predictions
