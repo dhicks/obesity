@@ -54,12 +54,12 @@ dataf_unfltd = dataf %>%
 #+ subset_data
 ## The subset of data that actually feeds into the models
 dataf = subset(dataf_unfltd, (!smoker) & (age.months >= 50*12 + 12) & 
-                        (age.months < age_cutoff*12 + 12) & 
-                        (follow.months.2011 > 0) &
-                        # (bmi.cat != 'underweight') &
-                        (bmi < 75) & 
-                        !is.na(bmi) &
-                        !is.na(education) & !is.na(mort.c))
+                   (age.months < age_cutoff*12 + 12) & 
+                   (follow.months.2011 > 0) &
+                   # (bmi.cat != 'underweight') &
+                   (bmi < 75) & 
+                   !is.na(bmi) &
+                   !is.na(education) & !is.na(mort.c))
 
 ## descriptive statistics for each variable in the dataset
 summary(dataf)
@@ -110,6 +110,7 @@ build_expr = function (design, variable, specification) {
     response = switch(specification, 
                       'cox' = 'Surv(age.follow.c, mort.c)',
                       'linear' = 'mort.c',
+                      'poisson' = 'mort.c',
                       'logistic' = 'mort.c',
                       'cloglog' = 'mort.c')
     form = str_c(response, ' ~ ', rhs)
@@ -117,32 +118,37 @@ build_expr = function (design, variable, specification) {
     expr = switch(specification, 
                   'cox' = as.expression(str_c(
                       'svycoxph(', form, ', ',
-                          'design = design)')),
+                      'design = design)')),
                   'linear' = as.expression(str_c(
                       'svyglm(', form, ', ',
-                          'design = design, ',
-                          'family = gaussian(link = "identity"))')),
+                      'design = design, ',
+                      'family = gaussian(link = "identity"))')),
                   'logistic' = as.expression(str_c(
                       'svyglm(', form, ', ',
-                          'design = design, ', 
-                          'family = quasibinomial(link = "logit"))')),
+                      'design = design, ', 
+                      'family = quasibinomial(link = "logit"))')),
+                  'poisson' = as.expression(str_c(
+                      'svyglm(', form, ', ',
+                      'design = design, ',
+                      'family = quasipoisson(link = "log"))')),
                   'cloglog' = as.expression(str_c(
                       'svyglm(', form, ', ',
                       'design = design, ', 
-                      'family = quasibinomial(link = "cloglog"))')))
+                      'family = quasibinomial(link = "cloglog"))'))
+    )
     
     return(parse(text = expr))
 }
 
 #' The calls are kept with the model metadata, which is useful, e.g., for confirming that `build_expr` works as expected. 
 models_df = cross_d(list('variable' = c('binned', 'continuous', 
-                            '4-spline', '6-spline'),
-                       'specification' = c('cox', 'logistic', 
-                                           'cloglog', 'linear'))) %>%
+                                        '4-spline', '6-spline'),
+                         'specification' = c('cox', 'logistic', 
+                                             'poisson', 'linear'))) %>%
     mutate(model_id = row_number()) %>%
     select(model_id, everything()) %>%
     by_row(function (df) build_expr(design, df$variable, 
-                                   df$specification), 
+                                    df$specification), 
            .to = 'model_expr')
 str(models_df, max.level = 1)
 
@@ -177,9 +183,9 @@ coefs = models %>%
     #        conf.high.calc = estimate + qnorm(.975)*std.error) %>%
     mutate(term_group = ifelse(str_detect(term, 'bmi'),
                                'bmi', 
-                        ifelse(str_detect(term, 'Intercept'), 
-                               'intercept',
-                               'covariates')))
+                               ifelse(str_detect(term, 'Intercept'), 
+                                      'intercept',
+                                      'covariates')))
 
 coefs %>%
     split(.$term_group) %>%
@@ -331,8 +337,8 @@ predictions = predictions %>%
 
 ## Plot predictions
 pred_plot = ggplot(predictions, aes(bmi, risk_rel, 
-                        fill = variable,
-                        linetype = specification)) + 
+                                    fill = variable,
+                                    linetype = specification)) + 
     geom_hline(yintercept = 1) +
     geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
                 alpha = .25) +
