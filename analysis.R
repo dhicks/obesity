@@ -267,10 +267,12 @@ aug %>%
     group_by(model_id, variable, specification) %>%
     summarize(q = quantile(prob, probs = 1 - sum(mort.c)/n()))
 
+threshold = .33
+
 ## Calculate evaluation statistics
 models_df = aug %>%
     filter(!is.na(mort.c)) %>%
-    mutate(prediction = ifelse(prob > .3, 1, 0)) %>% 
+    mutate(prediction = ifelse(prob > threshold, 1, 0)) %>% 
     group_by(variable, specification) %>%
     summarize(accuracy = mean(prediction == mort.c), 
               precision = sum(prediction * mort.c)/sum(mort.c), 
