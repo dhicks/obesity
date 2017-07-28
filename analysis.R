@@ -6,7 +6,7 @@
 #'     
 #' # Setup and Data #
 #'     
-#' We first load several required `R` packages and previously cleaned data.  Data come from NHANES III and continuous NHANES (cycles 1-3, 1999-2004), and followup mortality data from 2006 and 2011.  The models constructed below use only 2011 mortality data.  
+#' We first load several required R packages and previously cleaned data.  Data come from NHANES III and continuous NHANES (cycles 1-3, 1999-2004), and followup mortality data from 2006 and 2011.  The models constructed below use only 2011 mortality data.  
 
 ## ----------------------------------------
 #+ setup, message=FALSE, warning=FALSE
@@ -76,8 +76,8 @@ design = subset(design_unfltd, row.num %in% dataf$row.num)
 #' # Model Fitting #
 #' We examine three key decisions in constructing and evaluating models for these data:  
 #' 
-#' - *BMI*: (1) conventionally binned as "normal," "overweight," "obese I," and "obese II"; (2) as a continuous variable; (3) as a continuous variable with four cubic splines; (4) as a continuous variable with six cubic splines [see documentation for `splines::bs`]
-#' - *Model specification*: (1) a Cox proportional hazards model; two binomial regressions, using (2) a logistic link function; (3) a complementary log (cloglog) link function; and (4) an "ordinary" or "vanilla" linear regression, often called ordinary least-squares (OLS), with an identity link function. 
+#' - *BMI*: (1) conventionally binned as "normal," "overweight," "obese I," and "obese II"; (2) as a continuous variable; (3) as a continuous variable with cubic splines on four knot points; (4) as a continuous variable with cubic splines on six knot points [see documentation for `splines::bs`]
+#' - *Model specification*: (1) a Cox proportional hazards model; (2) a binomial regression with a logistic link function; (3) a Poisson regression, with a log link; and (4) an "ordinary" or "vanilla" linear regression, often called ordinary least-squares (OLS), with an identity link function. 
 #' - *Model selection* or goodness-of-fit evaluation using (1) deviance, (2) accuracy, (3) F1, and (4) AUC. 
 #' 
 #' The first two sets of decisions give us a total of 16 different models.  
@@ -201,19 +201,33 @@ coefs %>%
             coord_flip()
     )
 
+#' The BMI plot shows the incommensurability of the different BMI variables.  The estimate for continuous BMI is the estimated effect of a one-unit increase of BMI.  The categorical estimates are relative to the reference level, in this case "normal" weight (`bmi.cat2`).  The spline variables each have $n+k$ parameters, where $n$ is the number of knots and $k$ is the dimension of the basis functions (here $k=3$).  (B-spline bases are usually presented in terms of $n+k+1$ parameters, where the $+1$ corresponds to the constant or intercept.  In our models the intercept is handled by the intercept term of the regression.)  The values of these parameters do not appear to have a simple physical interpretation.  Further, it also does not make sense to compare these parameters across two different spline bases, i.e., between the 4- and 6-knot bases.  
+#' 
+#' By contrast, the coefficient and intercept plots may appear to be commensurable.  But this is also a mistake.  The coefficients do represent the additive contribution of the regressors to the right-hand-side of the regression equation.  But the link between the response and regression is different in each case.  The linear model is mathematically simplest, and we assume already familiar to our audience:  each unit increase in the regressor corresponds to an additive change of the response, by the coefficient.  In the logistic regression, the response is the probability of the event occuring (namely, the participant dies), and this is linked to the regressors using the logit or log-odds function:  
+#' \[ p(y = 1) = logit^{-1}(\beta_0 + \beta_1 x_1 + \cdots \beta_n x_n), \]
+#' where 
+#' \[logit (x) = \log\frac{x}{1-x}.\]
+#' Thus, in a logistic regression, a one-unit change in the regressor corresponds to a *multiplicative* change in the *log odds* of the response.  
+#' 
+#' In Poisson regression, the response is simply the response (i.e., not a probability), but it is linked to the regressors using a logarithm:  
+#' \[ y = e^{\beta_0 + \beta_1 x_1 + \cdots + \beta_n x_n}.\]
+#' Here a one-unit change in the regressor corresponds to a multiplicative change — as with the logistic regression — but now in the response itself.  
+#' 
+#' Finally, in a Cox proportional hazards model the response is a hazard function $h(t)$, giving the probability of an event occurring (i.e., participant death) after $t$ amount of time has passed.  The simplest hazard regression attempts to model this using a "baseline" hazard function and multiplicative change:  
+#' \[ h(t) = h_0(t) e^{\beta_1 x_1 + \cdots + \beta_n x_n}.\]
+#' Note that (1) when $x_i = 0$ for all of the regressors $x_i$, $h(t) = h_0(t)$; and (2) there is no intercept term $\beta_0$, since this is incorporated into the baseline $h_0(t)$.  However, estimating the baseline hazard function can be difficult.  Cox's innovation was to estimate the proportional hazard instead:  
+#' \[ \frac{h(t)}{h_0(t)} = e^{\beta_1 x_1 + \cdots + \beta_n x_n}.\]
+#' The right-hand side of this regression equation is similar to that of the Poisson regression.  And, in both cases, a one-unit change in a regressor corresponds to a multiplicative change in the response.  But the response variables on the left-hand side are different. So the coefficients from these two models are also incommensurable.  
+
 ## ----------------------------------------
 #' ## Model Accuracy ##
 #' Again, we are interested in model evaluation/selection using 4 different statistics:  (1) AIC, (2) accuracy, (3) F1, and (4) AUC. 
 
-## `survey` doesn't include an AIC calculation for Cox models
-getAnywhere('extractAIC.svycoxph')
-## So we'll define one
-setMethod('extractAIC', 'svycoxph', 
-          function (fit) {2*length(coef(fit)) - 2*fit$ll[2]})
+## `survey` 3.32-2 now includes an `extractAIC` method for Cox PH
 ## Then calculate AICs
 models_df = models %>% 
     map(extractAIC) %>%
-    map_if(function(x) length(x) > 1, ~ .x[['AIC']]) %>%
+    map(~ .x[['AIC']]) %>%
     combine() %>%
     tibble(model_id = 1:length(.), 
            AIC = .) %>%
@@ -284,7 +298,13 @@ models_df %>%
     scale_x_continuous(breaks = NULL, limits = c(0,2), name = '') +
     facet_wrap(~ statistic, scales = 'free')
 
-#' TODO: what do we conclude? 
+#' The Cox model performs worst under all four metrics.  For the two accuracy statistics (accuracy itself and AUROC for the accuracy curve), the other three models are comparable; variable seems to be more important than model specification, with continuous BMI performing slightly worse by AUROC than the other variables across all three specifications.  F1 generally finds continuous variables and linear models to perform worse than alternatives; logistic and Poisson models with spline variables seem to perform the best, presumably because these models are more flexible for fitting non-linear trends. 
+#' 
+#' AIC should be interpreted with care.  For the generalized regression models, the response variable is whether or not the survey responded died.  On the other hand, for the Cox model, the response is the amount of time the respondent survived until either dying, being lost to followup, or aging out of the study.  So the AIC of the Cox model probably shouldn't be compared to the AIC of the other three models.  AICs for the three GLMs should be comparable.  
+#' 
+#' The distribution of AICs for the three GLMs contrast sharply with those of the other statistics.  Variable seems to matter little or not at all; the plot gives the impression that the AIC values are the same for a given specification, but the table indicates small differences.  Specifically, linear models dominate the other specifications (in the game-theoretic sense) according to AIC.  By contrast, linear models had roughly the same accuracy and AUROC scores, and tended to have the second-worst F1 scores.  
+#' 
+#' All together, these statistics underdetermine the choice of model; and incommensurability appears again, insofar as AIC cannot be calculated for the Cox models.  
 
 ## ----------------------------------------
 #' ## Predictions ##
@@ -352,6 +372,12 @@ pred_plot = ggplot(predictions, aes(bmi, risk_rel,
     ylab('relative risk')
 pred_plot + facet_grid(~ variable)
 pred_plot + facet_grid(~ specification)
+
+#' Both plots show the same set of 16 predictions.  The first plot groups the predictions by variable, allowing us to compare different model specifications.  Above the "normal" BMI range, the Cox model generally produces much higher risk estimates than the other three.  For the spline variables, all of the models see a dramatic increase at the left and right edges of the plot; this is due in part to the basis vectors, which act as simple cubics as we approach the edges of the data.  
+#' 
+#' Every model — except the four continuous-variable models — is consistent with reduced risk across the "overweight" range.  The non-Cox spline models extend this reduced risk until well into the "obese II' range.  The non-Cox models of the binned and continuous variables show an elevated — but arguably relatively small — risk in "obese I."  Many of the individual curves find evidence to support the "obesity paradox."  
+#' 
+#' The second plot groups models by specification, allowing us to compare different representations of BMI.  Two patterns stand out here.  First, the two spline variable curves are generally quite close within each specification, even though they different quite a bit from the other variables (especially at the edges of the data).  Second, the Cox model is clearly the most consistent across the four variables, especially at greater BMI.  
 
 
 #+ eval = FALSE, echo = FALSE
