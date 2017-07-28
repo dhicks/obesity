@@ -18,7 +18,7 @@ library(stringr)
 library(purrr)
 ## complex survey designs + survival analysis
 library(survival)
-library(survey)
+library(survey)  ## NB version >= 3.32-2
 ## spline models
 library(splines)
 library(AUC)
@@ -174,8 +174,8 @@ models = map(models_df$model_expr, eval)
 #'  
 #+ coefficients
 coefs = models %>%
-    map(tidy, conf.int = .95) %>%
-    bind_rows(.id = 'model_id') %>%
+    map(tidy, conf.int = .95) %>% 
+    bind_rows(.id = 'model_id') %>% 
     mutate(model_id = as.integer(model_id)) %>%
     left_join(models_df, .) %>%
     ## The next two lines calculate CIs manually
