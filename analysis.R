@@ -278,14 +278,33 @@ models_df = aug %>%
               precision = sum(prediction * mort.c)/sum(mort.c), 
               recall = sum(prediction * mort.c)/sum(prediction), 
               f1 = 2*1/(1/precision + 1/recall), 
-              auroc = {roc(prob, as.factor(mort.c)) %>% auc()}) %>%
+              roc_curve = list(roc(prob, as.factor(mort.c))),
+              auroc = {map(roc_curve, auc) %>% unlist()}) %>%
     ungroup() %>%
     full_join(models_df, .)
+
+## Plot ROC curves
+roc_curves = models_df$roc_curve %>%
+    map(tidy) %>%
+    bind_rows(.id = 'model_id') %>%
+    as_tibble() %>%
+    mutate(model_id = as.integer(model_id)) %>%
+    left_join(select(models_df, model_id, variable, specification))
+ggplot(roc_curves, aes(fpr, tpr, 
+                       group = interaction(variable, specification), 
+                       color = specification)) + 
+    geom_line() +
+    geom_segment(x = 0, y = 0, xend = 1, yend = 1,
+                 linetype = 'dashed',
+                 inherit.aes = FALSE)
 
 ## Sortable table FTW
 models_df %>%
     select(variable, specification, 
            AIC, accuracy, f1, auroc) %>%
+    ## 3 digits of precision
+    mutate_at(c('AIC', 'accuracy', 'f1', 'auroc'), 
+              funs(signif(., digits = 3))) %>%
     datatable()
 
 ## Plot of evaluation statistics
