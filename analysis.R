@@ -11,14 +11,28 @@
 ## ----------------------------------------
 #+ setup, message=FALSE, warning=FALSE
 ## tidyverse
+    ## Changes to bind_rows() in dplyr 0.6.0 break the code used to extract predictions from the models:  
+    ##  https://github.com/tidyverse/dplyr/issues/3134  
+    ## The next few lines install dplyr 0.5.0, and load it before loading tidyverse.  
+# withr::with_libpaths(new = paste0(getwd(), '/legacy_packages'), 
+#                      code = devtools::install_version('dplyr', 
+#                                                       version = '0.5.0', 
+#                                                       repos = 'http://cran.us.r-project.org'))
+
+withr::with_libpaths(new = paste0(getwd(), '/legacy_packages'), 
+                     code = {library('dplyr')})
+
 library(tidyverse)
 library(cowplot)
 library(broom)
 library(stringr)
 library(purrr)
+library(purrrlyr)
 ## complex survey designs + survival analysis
 library(survival)
 library(survey)  ## NB version >= 3.32-2
+    ## As of 2017-10-04, this needs to be installed from dev:  
+    ## install.packages("survey", repos = "http://R-Forge.R-project.org")
 ## spline models
 library(splines)
 library(AUC)
@@ -62,6 +76,7 @@ dataf = subset(dataf_unfltd, (!smoker) & (age.months >= 50*12 + 12) &
                    !is.na(education) & !is.na(mort.c))
 
 ## descriptive statistics for each variable in the dataset
+str(dataf)
 summary(dataf)
 
 ## Move to a survey design object
@@ -141,7 +156,7 @@ build_expr = function (design, variable, specification) {
 }
 
 #' The calls are kept with the model metadata, which is useful, e.g., for confirming that `build_expr` works as expected. 
-models_df = cross_d(list('variable' = c('binned', 'continuous', 
+models_df = cross_df(list('variable' = c('binned', 'continuous', 
                                         '4-spline', '6-spline'),
                          'specification' = c('cox', 'logistic', 
                                              'poisson', 'linear'))) %>%
@@ -467,3 +482,5 @@ pred_plot + facet_grid(~ specification)
 #     geom_linerange(aes(ymin = conf.low, ymax = conf.high)) +
 #     coord_flip()
 # 
+
+sessionInfo()
