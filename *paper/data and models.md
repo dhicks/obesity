@@ -2,13 +2,15 @@
 
 We used data from the National Health and Nutrition Examination Survey (NHANES), an ongoing health survey conducted by the US National Institutes of Health.  NHANES collects clinical, behavioral, demographic, and socioeconomic data on respondents across the United States; is anonymously linked to mortality data curated by the Centers for Disease Control and Prevention (CDC); uses a complex survey design to permit better statistical inferences about both the US population as a whole and smaller subpopulations (e.g., racial and ethnic minorities); and is freely available to the public.  For these reasons, NHANES is widely used in epidemiology and public health.  For example, the original "obesity paradox" paper by Flegal et al *[cite] is based on NHANES data.  
 
-*[NHANES is a series of waves or rounds; we used h, j, k of these]
+NHANES was initially conducted as a series of independent surveys; NHANES III, the third such survey, was conducted from 1988-1994.  Beginning in 1999, NHANES moved to a continuous cycle format, with new data released every two years. *[https://wwwn.cdc.gov/nchs/nhanes/Default.aspx]  Here we use NHANES III and cycles 1-3 of continuous NHANES, covering 1999-2004.  Followup mortality data were collected in 2011 *[https://www.cdc.gov/nchs/data-linkage/mortality-public.htm].  Both NHANES III and continuous NHANES use a complex survey design that oversamples "black and Mexican-American," to allow reliable inferences about these minority groups  *[https://wwwn.cdc.gov/nchs/data/series/sr02_113.pdf 1].  Analyzing these complex survey data requires specific methods *[survey package]; these methods are standard in the epidemiology literature, and we used them as well in all of our analyses here.  
 
-Following studies in the "obesity paradox" literature *[cites], we focus our analysis on the association between BMI and all-cause mortality, incorporating several social and demographic variables into our models as controls: *[assigned sex, race/ethnicity *[note probs w/ cite to Sean], education].  
+Following studies in the "obesity paradox" literature *[cites], we focus our analysis on the association between BMI and all-cause mortality, incorporating several social and demographic variables into our models as controls: dichotomous sex, race/ethnicity *[note probs w/ cite to Sean], education level.  For the Cox proportional hazards model, age at followup was used as survival time (see below); for the other models, age at followup was included in the covariates as another control.  
 
-Further, also following the lead of studies in the "obesity paradox" literature, we filter the NHANES sample, including only individuals who (1) report never smoking cigarettes, (2) *[have BMI less than something, greater than something?], *[and?] (3) were at least *[n] years old when they participated in NHANES and were no more than *[m] years old when the CDC followed up to determine their mortality status (i.e., whether they were dead or alive).  
+Further, also following the lead of studies in the "obesity paradox" literature, we filter the NHANES sample, including only individuals who (1) report never smoking cigarettes, (2) *[have BMI less than something, greater than something?], *[and?] (3) were at least *[n] years old when they participated in NHANES and were no more than *[m] years old when their mortality status (i.e., whether they were dead or alive) was determined in 2011.  
 
-Clearly both the choice of variables and the use of filtering criteria introduce what we might call *data collection uncertainty*.  Note that this uncertainty is not due to limited precision in measurement — what we might call *measurement uncertainty* — or questions about the extent to which the sample accurately represents a target population — *inductive uncertainty*.  These three kinds of uncertainty are also significant and worth further analysis; however, since our focus is on model-related uncertainty we do not discuss them further here.  
+All together, the dataset we use includes *[n] individuals
+
+Clearly both the choice of variables and the use of filtering criteria introduce what we might call *data collection uncertainty*.  Note that this uncertainty is not due to limited precision in measurement — that is, *measurement uncertainty* — or questions about the extent to which the sample accurately represents a target population — *inductive uncertainty*.  These three kinds of uncertainty are also significant and worth further analysis; however, since our focus is on model-related uncertainty we do not discuss them further here.  
 
 ## Models ##
 
@@ -20,8 +22,8 @@ We focus here on three sources of model uncertainty, which we call *covariate sp
 | Binned or discrete BMI       | Logistic
 | 4-knot spline                | Poisson
 | 6-knot spline                | Cox PH
-|------------------------------|-------------------------|
-Table 1: Variations used for each source of model uncertainty.  The columns are read independently, giving a total of *[16] models (for the first two columns) that are evaluated using 4 different model selection statistics.  
+|:-----------------------------|:------------------------|
+Table 1: Variations used for each source of model uncertainty.  The columns are read independently, giving a total of 16 models (for the first two columns) that are evaluated using 4 different model selection statistics.  
 
 ### Covariate Specification ###
 
@@ -92,3 +94,11 @@ Different approaches to hazard analysis use different methods to estimate the ba
 \[\frac{\lambda(t | x_1, x_2, \ldots)}{\lambda_0(t)} = e^{\beta_1 x_1 + \beta_2 x_2 + \cdots}.\]
 
 Here the response variable is not the hazard at time $t$, but instead the hazard at time $t$ for one group of individuals (characterized by the particular values of the covariates) relative to the baseline group (when all of the covariates are equal to 0).  Cox proportional hazards is widely used in epidemiology.  Indeed, *[cites to obesity paradox literature]
+
+All together, with four ways of specifying the key covariate, BMI, and four ways of specifying the other features of the statistical model, we have 16 distinct regression models of the relationship between BMI and all-cause mortality.  
+
+## Model Selection ##
+
+We compare these 16 models using four different *model selection* or goodness-of-fit statistics.  *[ref to disc of accuracy in model-based science section]
+
+
