@@ -323,7 +323,7 @@ models_df %>%
     datatable()
 
 ## Plot of evaluation statistics
-models_df %>%
+pred_fid_plot = models_df %>%
     select(variable, specification, 
            AIC, accuracy, f1, auroc) %>%
     mutate(AIC = -AIC) %>%
@@ -333,6 +333,9 @@ models_df %>%
     geom_point(position = position_dodge(width = .5)) + 
     scale_x_continuous(breaks = NULL, limits = c(0,2), name = '') +
     facet_wrap(~ statistic, scales = 'free')
+
+save_plot('01_pred_fit.png', pred_fid_plot, 
+          base_width = 6, base_height = 4)
 
 #' The Cox model performs worst under all four metrics.  For the two accuracy statistics (accuracy itself and AUROC for the accuracy curve), the other three models are comparable; variable seems to be more important than model specification, with continuous BMI performing slightly worse by AUROC than the other variables across all three specifications.  F1 generally finds continuous variables and linear models to perform worse than alternatives; logistic and Poisson models with spline variables seem to perform the best, presumably because these models are more flexible for fitting non-linear trends. 
 #' 
@@ -407,7 +410,11 @@ pred_plot = ggplot(predictions, aes(bmi, risk_rel,
     coord_cartesian(ylim = c(.5, 2)) +
     ylab('relative risk')
 pred_plot + facet_grid(~ variable)
+save_plot('02_rr_preds.png', pred_plot + facet_grid(~ variable), 
+          base_width = 10, base_height = 5)
 pred_plot + facet_grid(~ specification)
+save_plot('03_rr_preds.png', pred_plot + facet_grid(~ specification), 
+          base_width = 10, base_height = 5)
 
 #' Both plots show the same set of 16 predictions.  The first plot groups the predictions by variable, allowing us to compare different model specifications.  Above the "normal" BMI range, the Cox model generally produces much higher risk estimates than the other three.  For the spline variables, all of the models see a dramatic increase at the left and right edges of the plot; this is due in part to the basis vectors, which act as simple cubics as we approach the edges of the data.  
 #' 
