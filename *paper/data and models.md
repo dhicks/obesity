@@ -29,7 +29,7 @@ Table 1: Variations used for each source of model uncertainty.  The columns are 
 
 Before discussing these sources of uncertainty, note that we do not consider interactions between covariates, which are another form of structural uncertainty for statistical models.  In a standard linear regression of $Y$ against two covariates $X_1$ and $X_2$, an interaction between $X_1$ and $X_2$ is represented by a multiplicative term:  
 
-\[ Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_{1,2} X_1 \cdot X_2. \]
+$$ Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_{1,2} X_1 \cdot X_2. $$
 
 When the coefficient on the interaction term $\beta_{1,2}$ is non-zero, the effect of $X_1$ on $Y$ depends on the value of $X_2$, and vice versa.  In this sense, $X_1$ and $X_2$ are not independent; their effects cannot be separated.  For example, if $X_1$ is BMI and $X_2$ is sex, with $X_2 = 0$ representing women, then the effect of BMI on $Y$ is $\beta_1$ for women and $beta_1 + beta_{1,2}$ for men.  
 
@@ -37,9 +37,9 @@ In the context of human genetics, James Tabery argues that gene-environment inte
 
 ### Covariate Specification ###
 
-By *covariate specification*, we refer to the way the independent variables in a statistical model are specified.  Consider a seemingly-simple univariate linear regression model:  *[match symbology]
+By *covariate specification*, we refer to the way the independent variables in a statistical model are specified.  Consider a seemingly-simple univariate linear regression model:  
 
-\[ Y = \beta X + \beta_0 \]
+$$ Y = \beta X + \beta_0 $$
 
 Even given this model specification, there may be several different ways of specifying the independent variable or covariate $X$.  These different specifications of $X$ may lead to different conclusions about the relationship between $X$ and $Y$.  
 
@@ -67,7 +67,7 @@ Splines allow us to treat BMI as a continuous variable while also allowing the r
 
 By *model specification*, we refer to the mathematical structure of the statistical model other than the covariate specification.  One of the most common statistical model specifications is the standard linear regression, where the response $Y$ is represented as a linear combination of the covariates $X_1, X_2, \ldots$:  
 
-\[ Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \cdots.\]
+$$ Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \cdots.$$
 
 However, this model specification does not fit easily with our response variable $Y$, all-cause mortality — that is, there are serious limits to its fidelity to the data-generating process.  $Y$ can take exactly two values:  alive or dead.  These two values can be represented numerically as 0 or 1.  But predicted values $\hat y$ — estimates of $y$ produced using the model — are not limited to these two values.  When the predicted values of $\hat y$ are between 0 and 1, they might be interpreted as probabilities — for example, a predicted value $\hat y = .25$ can be interpreted as a 25% chance of being dead.  But, even then, the standard linear regression does not place bounds on the range of $\hat y$.  So for sufficient large (positive or negative) values of the covariates, $\hat y$ will be less than 0 or greater than 1.  Obviously these values cannot be interpreted as probabilities.  
 
@@ -75,13 +75,13 @@ However, this model specification does not fit easily with our response variable
 
 To connect the distribution $\mathbf{Y}$ to the $X$, we assume the existence of an invertible *link function* $g$:  
 
-\[ E[\mathbf{Y}] = g^{-1}(\beta_0 + \beta_1 X_1 + \beta_2 X_2 + \cdots)\]
+$$ E[\mathbf{Y}] = g^{-1}(\beta_0 + \beta_1 X_1 + \beta_2 X_2 + \cdots)$$
 
 where $E[\mathbf{Y}]$ is the expected value of $\mathbf{Y}$.  For the Bernoulli distribution with bias $\theta$, $E[\mathbf{Y}] = \theta$.  So the covariates do not directly predict the observed values of the response variable $y$.  Instead, they predict a key property of the distribution that generates those observations — namely, the unobserved bias in the "coin flip."  
 
 For binomial regression, a standard link function is the logit function
 
-\[ g(p) = \log\frac{p}{1-p}. \]
+$$ g(p) = \log\frac{p}{1-p}. $$
 
 The inverse $g^{-1}(x) = \frac{e^x}{1+e^x}$ is called the logistic function; so a binomial regression with a logit link is typically called simply *logistic regression*.  Note that the logit takes a probability $p$ to the logarithm of its odds, or log-odds.  So logistic regression connects the covariates to the log-odds of the bias $\theta$ of the "coin flips" generating the observed response values $y$.  Further, 
 
@@ -94,7 +94,7 @@ The inverse $g^{-1}(x) = \frac{e^x}{1+e^x}$ is called the logistic function; so 
 In the standard linear regression, for a given covariate, the ceteris paribus effect of that covariate (that is, keeping the values of all other covariates fixed) is linear.  And these effects are added together to predict the response.  By contrast, in logistic regression, the ceteris paribus effect of a covariate is exponential, and these effects are multiplied together to predict the response.  This means that the coefficients in the two model specifications — the $\beta$s — are incommensurable.  We cannot compare $\beta_1$ in a standard linear regression to $\beta_1$ in a logistic regression and ask whether their values are "the same" or "different."  
 
 The first two model specifications that we consider here are a standard linear regression and logistic regression.  Logistic regression clearly is much more faithful to the data-generating process; but in actual scientific practice standard linear regressions are widely used even when logistic regressions would be more faithful.  On the other hand, standard linear regressions are more familiar to researchers and, perhaps for this reason, can be easier for researchers to interpret.  Further, and most importantly for our argument here, using generalized linear regression models introduces further sources of structural uncertainty, as different link functions can be used for a given way of modeling the response.  For example, besides the logit link, binomial regression can be used with the probit link — the probit is the inverse of the cumulative distribution function for the standard Gaussian ("normal") distribution — or the complementary log-log link:  
-\[ g(p) = \log(-\log(1-p)) .\]
+$$ g(p) = \log(-\log(1-p)) .$$
 
 Our response variable — alive or dead — can also be represented as a discrete count variable — the "number of deaths" that occur for the given individual between their participation in NHANES and the CDC mortality followup.  The Poisson distribution is commonly used to represent discrete count variables, and so can be used to construct an alternative generalized linear model.  The Poisson distribution is described by a single positive real-valued parameter $\lambda$, gives the expected value, i.e., the expected number of events.  The natural logarithm is the standard link function for a Poisson regression.  This gives us our third model specification.  
 
@@ -102,11 +102,11 @@ It might be objected that Poisson regression is clearly not faithful to the data
 
 Our fourth model specification takes a conceptually different approach to the response variable.  Rather than treating it as a discrete alive or dead outcome, *survival analysis* treats the response variable as *survival time*, or the amount of time between the beginning of the study and an event (in our case, age at death).  More precisely, survival analysis is interested in modeling a hazard function $\lambda(t)$, which gives the probability of an event occurring at time $t$.  In the context of a regression, we model the hazard function in terms of covariates $X_1, X_2, \ldots$ and a baseline hazard function $\lambda_0$:  
 
-\[ \lambda(t|X_1, X_2, \ldots) = \lambda_0(t) e^{\beta_1 X_1 + \beta_2 X_2 + \cdots}.\]
+$$ \lambda(t|X_1, X_2, \ldots) = \lambda_0(t) e^{\beta_1 X_1 + \beta_2 X_2 + \cdots}.$$
 
 Different approaches to hazard analysis use different methods to estimate the baseline hazard function $\lambda_0$.  The statistician David Cox developed an important method, now called *Cox proportional hazards regression* or sometimes simply *Cox regression*, that avoids estimating the baseline hazard function, and instead focuses on estimating the relative hazard or risk:  
 
-\[\frac{\lambda(t | X_1, X_2, \ldots)}{\lambda_0(t)} = e^{\beta_1 X_1 + \beta_2 X_2 + \cdots}.\]
+$$\frac{\lambda(t | X_1, X_2, \ldots)}{\lambda_0(t)} = e^{\beta_1 X_1 + \beta_2 X_2 + \cdots}.$$
 
 Here the response variable is not the hazard at time $t$, but instead the hazard at time $t$ for one group of individuals (characterized by the particular values of the covariates) relative to the baseline group (when all of the covariates are equal to 0).  Thus, while the right-hand side of the Cox model is similar to the right-hand sides of the logistic and Poisson regression, coefficients between these models cannot be compared:  for a given covariate $X_1$, it does not make sense to ask whether its coefficient $\beta_1$ in one model is greater, or less, than its coefficient in a different model.  
 
