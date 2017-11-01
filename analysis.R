@@ -109,6 +109,9 @@ build_expr = function (design, variable, specification) {
         round(digits = 2) %>%
         str_c(collapse = ', ') %>%
         str_c('c(', ., ')')
+    variable = as.character(variable)
+    specification = as.character(specification)
+    
     var = switch(variable, 
                  'binned' = 'bmi.cat',
                  'continuous' = 'bmi',
@@ -158,10 +161,17 @@ build_expr = function (design, variable, specification) {
 }
 
 #' The calls are kept with the model metadata, which is useful, e.g., for confirming that `build_expr` works as expected. 
-models_df = cross_df(list('variable' = c('binned', 'continuous', 
-                                        '4-spline', '6-spline'),
-                         'specification' = c('cox', 'logistic', 
-                                             'poisson', 'linear'))) %>%
+models_df = cross_df(list('variable' = forcats::as_factor(
+                                            c('binned', 
+                                              'continuous', 
+                                              'square',
+                                              '4-spline', 
+                                              '6-spline')),
+                         'specification' = forcats::as_factor(
+                                            c('linear', 
+                                              'logistic', 
+                                              'poisson', 
+                                              'cox')))) %>%
     mutate(model_id = row_number()) %>%
     select(model_id, everything()) %>%
     by_row(function (df) build_expr(design, df$variable, 
