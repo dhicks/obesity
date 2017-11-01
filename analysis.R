@@ -112,6 +112,8 @@ build_expr = function (design, variable, specification) {
     var = switch(variable, 
                  'binned' = 'bmi.cat',
                  'continuous' = 'bmi',
+                 'square' = 'bmi + I(bmi^2)',
+                 'cube' = 'bmi + I(bmi^2) + I(bmi^3)',
                  '4-spline' = str_c('bs(bmi, knots = ', 
                                     knots_4, ')'), 
                  '6-spline' = str_c('bs(bmi, knots = ', 
