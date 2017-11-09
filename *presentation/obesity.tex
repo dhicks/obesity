@@ -57,7 +57,11 @@
 		\item Vaccines \autocite{Hicks2017a}
 		\item \blue{Obesity}
 		 \end{itemize}
-	\item \red{Epistemic contingency} or ``unforced methodological choices'' \autocite{Winsberg2012} and statistics in scientific practice
+	\item \red{Epistemically significant contingency} 
+		\begin{itemize}
+		\item or ``unforced methodological choices'' \autocite{Winsberg2012} 
+		\item and statistics in scientific practice \autocite[Cf][]{Steel2015b}
+		\end{itemize}
 	\end{itemize}
 }
 \frame
@@ -76,10 +80,23 @@
 			underweight, normal, overweight, obese I, obese II
 		\end{itemize}
 	\item Endpoint is often all-cause mortality
-	\item Effects often estimated as hazard ratios (normal weight = 1)
+%	\item Effects often estimated as hazard ratios (normal weight = 1)
 	\end{itemize}
 }
-
+%\frame
+%{
+%	\frametitle{Background: ``Obesity Paradox''}
+%	\makebox[\textwidth]{
+%		\includegraphics[width = 1.1\textwidth]{Flegal-chart.png}
+%	}
+%	\vfill
+%	\cites{Flegal2005}[see also][]{McAuley2012; Kramer2013}
+%%	\vfill
+%%	\begin{center}
+%%		\includegraphics[height = .33\textheight]{McAuley-fig1a.pdf}
+%%	\end{center}
+%%	\cite{McAuley2012}
+%}
 
 
 \section{Two Kinds of Model Uncertainty}
@@ -89,7 +106,7 @@
 {
 	\frametitle{Two Kinds of Model Uncertainty}
 	\begin{description}
-		\item[Parameter uncertainty] Uncertainty about the true values of unobserved/-able quantities.  
+		\item[Parameter uncertainty] Uncertainty about the true values of {\tiny (unobserved/-able)} quantities.  
 		\item[Structural uncertainty] Uncertainty about the mathematical form that the model should have.  \autocite[265]{Parker2010}
 	\end{description}
 	\pause
@@ -145,8 +162,10 @@
 \frame
 {
 	\frametitle{Model Selection and Parameter Uncertainty}
+	From the perspective of model 2
 	\begin{itemize}
-		\item From the perspective of model 2, model 1 just stipulates $\beta_{ses} = 0$
+		\item Model 1 just stipulates $\beta_{ses} = 0$
+		\item So model 1 is just a special case of model 2
 		\item So this kind of model selection is a parameter uncertainty issue
 	\end{itemize}
 }
@@ -168,8 +187,12 @@
 	\only<2->{
 		\begin{itemize}
 			\item What kind of variable is $bmi$? 
-			\item What distribution family do we use for $M$?\\  
-				What function do we use for $g$? 
+			\item What kind of variable is $mortality$?\\  
+				\begin{itemize}
+				\tiny
+				\item What distribution is $M$? 
+				\item What function is $g$? 
+				\end{itemize}
 			\item<3-> \blue{These are structural uncertainty questions}
 		\end{itemize}
 	}
@@ -255,13 +278,13 @@
 {
 	\frametitle{Model Specifications}
 	\begin{description}
-	\item[Linear] $mortality$ is a continuous, unbounded variable
+	\item[Linear] \blue{$mortality$ is a continuous, unbounded variable}
 		\[mortality \sim Gauss(\mu, \sigma); g(\mu) = \mu\]
-	\item[Logistic] $mortality$ is a binary outcome (viz., dying or not)
+	\item[Logistic] \blue{$mortality$ is a binary outcome (viz., dying or not)}
 		\[mortality \sim Bernoulli(\theta); g(\theta) = \log \frac{\theta}{1-\theta}\]
-	\item[Poisson] $mortality$ is a count of events (viz., number of times the individual dies)
+	\item[Poisson] \blue{$mortality$ is a count of events (viz., number of times the individual dies)}
 		\[mortality \sim Poisson(\lambda); g(\lambda) = \log(\lambda)\]
-	\item[Cox PH] Response is hazard ratio at time $t$: 
+	\item[Cox PH] \blue{Response is hazard ratio at time $t$}: 
 		\[\frac{\eta(t | \mathbf{X})}{\eta_0(t)} = e^{\mathbf{X\beta}} \]
 	\end{description}
 }
@@ -300,6 +323,7 @@
 		\item \green{Except for Cox PH}
 		\end{itemize}
 	\item \red{Variable specification} \textbf{is} epistemically significant in this case.  
+%	\item Presence of an ``obesity paradox'' depends on both model and variable specification.  
 	\end{itemize}
 }
 \frame
