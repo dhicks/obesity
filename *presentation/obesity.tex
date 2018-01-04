@@ -21,7 +21,7 @@
 
 \begin{document}
 \date{}
-\title{``Does this Study Make me Look Fat?''\\  Statistical Structural Uncertainty and the Obesity Paradox}
+\title{Many Models and Public Health Data}
 \author[Dan Hicks]{
 	Dan Hicks (Data Science Initiative, UC Davis)\\
 	{\scriptsize \href{mailto:djhicks@ucdavis.edu}{\texttt{djhicks@ucdavis.edu}}}\\ 
@@ -34,6 +34,17 @@
 {
 	\titlepage
 }
+
+\frame
+{
+	\frametitle{The Whole Talk in One Slide}
+	\begin{center}
+	\parbox{.67\textwidth}{
+		What happens when you run 20 different\\ regression models on the same data?  
+	}
+	\end{center}
+}
+
 
 \frame
 {
@@ -50,18 +61,13 @@
 	\frametitle{Background:  DJH}
 	\begin{itemize}
 	\item Philosophy of science, STS
-	\item ``Science and values'' / Public scientific controversies
+	\item Public scientific controversies
 		\begin{itemize}
 		\item Genetically modified foods \autocite{Hicks2015, Hicks2016a, Hicks2017b}
 		\item Climate \autocite{Hicks2017a}
 		\item Vaccines \autocite{Hicks2017a}
 		\item \blue{Obesity}
 		 \end{itemize}
-	\item \red{Epistemically significant contingency} 
-		\begin{itemize}
-		\item or ``unforced methodological choices'' \autocite{Winsberg2012} 
-		\item and statistics in scientific practice \autocite[Cf][]{Steel2015b}
-		\end{itemize}
 	\end{itemize}
 }
 \frame
@@ -76,11 +82,10 @@
 	\item ``Fatness'' operationalized as \red{body mass index} [BMI]
 		\begin{itemize}
 		\item Continuous variable:  $\displaystyle \frac{weight}{height^2}$
-		\item Usually broken into discrete categories:\\
+		\item \red{Usually broken into discrete categories}:\\
 			underweight, normal, overweight, obese I, obese II
 		\end{itemize}
-	\item Endpoint is often all-cause mortality
-%	\item Effects often estimated as hazard ratios (normal weight = 1)
+	\item Frequently modeled with Cox proportional hazards
 	\end{itemize}
 }
 %\frame
@@ -98,113 +103,6 @@
 %%	\cite{McAuley2012}
 %}
 
-
-\section{Two Kinds of Model Uncertainty}
-\subsection*{}
-
-\frame
-{
-	\frametitle{Two Kinds of Model Uncertainty}
-	\begin{description}
-		\item[Parameter uncertainty] Uncertainty about the true values of {\tiny (unobserved/-able)} quantities.  
-		\item[Structural uncertainty] Uncertainty about the mathematical form that the model should have.  \autocite[265]{Parker2010}
-	\end{description}
-	\pause
-	\begin{itemize}
-		\item Statistics is designed to manage and mitigate parameter uncertainty.  
-		\pause
-		\item But structural uncertainty of statistical models is not discussed (much).
-			\begin{itemize}
-			\scriptsize
-			\item Common philosophical view that statistical models merely ``present the data in a `neat' way'' \autocite[\S 1.2]{Frigg2017}
-			\item Philosophers of statistics generally preoccupied with frequentist vs.~Bayesian dispute
-			\end{itemize}
-		\pause
-		\item \textbf{Thesis:} 
-			\begin{enumerate}
-			\item \red{Statistical models have structural uncertainty}
-			\item \red{This structural uncertainty can be epistemically significant}
-			\end{enumerate}
-	\end{itemize}
-}
-\subsection{Parameter Uncertainty}
-\frame
-{
-	\frametitle{Modeling Mortality and BMI}
-	\[mortality = \beta_0 + \beta_{sex} sex + \beta_{bmi} bmi + \varepsilon\]
-	\pause
-	
-	Should we include socio-economic status $ses$ in our model?  
-}
-\frame
-{
-	\frametitle{Model Selection: The Common Strategy}
-	\begin{enumerate}
-	\item Build two models:
-		\begin{enumerate}
-		\item $sex$, $bmi$
-		\item $sex$, $bmi$, $ses$
-		\end{enumerate}
-	\item Calculate \red{evaluation statistics} for each model
-		\begin{itemize}
-		\item AIC \autocite[131ff]{Sober2015}
-		\item For continuous response:  $R^2$, RSS, RMSE, \ldots.
-		\item For binary response:  Accuracy, sensitivity (FNR), precision, $\kappa$, AUROC, \ldots.
-		\item ANOVA + F
-		\item \ldots.
-		\end{itemize}
-	\item Select the model with the best statistic
-	\end{enumerate}
-	\pause
-	\blank
-	\raggedleft NB Structural uncertainty here!  
-}
-\frame
-{
-	\frametitle{Model Selection and Parameter Uncertainty}
-	From the perspective of model 2
-	\begin{itemize}
-		\item Model 1 just stipulates $\beta_{ses} = 0$
-		\item So model 1 is just a special case of model 2
-		\item So this kind of model selection is a parameter uncertainty issue
-	\end{itemize}
-}
-\subsection{Structural Uncertainty}
-\frame
-{
-	\frametitle{Modeling Mortality and BMI, redux}
-	\begin{align*}
-		mortality &\sim M(\theta)\\
-		E[M(\theta)] &= g^{-1} (\beta_0 + \beta_{sex} sex + \beta_{bmi} bmi)
-	\end{align*}
-	\only<1>{
-		\begin{itemize}
-			\item ``Mortality is distributed as $M(\theta)$''
-			\item Error term $\varepsilon$ is bundled into $M(\theta)$
-			\item $g$ is called the \technical{link function}
-		\end{itemize}
-	}
-	\only<2->{
-		\begin{itemize}
-			\item What kind of variable is $bmi$? 
-			\item What kind of variable is $mortality$?\\  
-				\begin{itemize}
-				\tiny
-				\item What distribution is $M$? 
-				\item What function is $g$? 
-				\end{itemize}
-			\item<3-> \blue{These are structural uncertainty questions}
-		\end{itemize}
-	}
-}
-\frame
-{
-	\frametitle{Thesis}
-	\begin{enumerate}
-		\item {Statistical models have structural uncertainty}
-		\item {This structural uncertainty can be epistemically significant}
-	\end{enumerate}
-}
 
 
 \section{Many Models}
@@ -234,7 +132,7 @@
 	\frametitle{Many Models}
 	\begin{center}
 	\begin{tabular}{c|c}
-	\textbf{Covariate Specification} & \textbf{Model Specification}\\
+	\textbf{BMI Specification} & \textbf{Model Specification}\\
 	\hline
 	Binned or discrete BMI & Linear \\
 	Continuous BMI & Logistic\\
@@ -247,7 +145,7 @@
 }
 \frame
 {
-	\frametitle{Covariate Specifications}
+	\frametitle{BMI Specifications}
 	\begin{description}
 	\item[Binned] BMI is divided into discrete bins or categories:  
 		\begin{center}
@@ -283,21 +181,11 @@
 	\item[Logistic] \blue{$mortality$ is a binary outcome (viz., dying or not)}
 		\[mortality \sim Bernoulli(\theta); g(\theta) = \log \frac{\theta}{1-\theta}\]
 	\item[Poisson] \blue{$mortality$ is a count of events (viz., number of times the individual dies)}
+		{\tiny (\url{https://stats.stackexchange.com/questions/18595/})}
 		\[mortality \sim Poisson(\lambda); g(\lambda) = \log(\lambda)\]
 	\item[Cox PH] \blue{Response is hazard ratio at time $t$}: 
 		\[\frac{\eta(t | \mathbf{X})}{\eta_0(t)} = e^{\mathbf{X\beta}} \]
 	\end{description}
-}
-\frame
-{
-%	\frametitle{Hazard Ratios}
-%	\[\lambda(t) = \frac{d}{dt} Pr(t \leq T < t + dt | T \geq t),\]
-%	where $T$ is the event time (viz., when the individual dies)
-	\begin{center}
-	\includegraphics[height = .9\textheight]{hazard.jpg}
-	\end{center}
-	\vfill
-	\tiny \url{http://slideplayer.com/slide/8621887/}
 }
 \frame
 {
@@ -315,27 +203,70 @@
 }
 \frame
 {
-	\frametitle{Summary of Findings}
+	\frametitle{Note}
 	\begin{itemize}
-	\item \emph{Ex ante} we might expect \blue{model specification} to be more epistemically significant than \red{variable specification}.  
-	\item \blue{Model specification} \textbf{is not} epistemically significant in this case.  
-		\begin{itemize}
-		\item \green{Except for Cox PH}
-		\end{itemize}
-	\item \red{Variable specification} \textbf{is} epistemically significant in this case.  
-%	\item Presence of an ``obesity paradox'' depends on both model and variable specification.  
+	\item Cox PH is doing something completely different.  
+	\item Other model specifications generally agree with each other.  
+	\item BMI specification makes a dramatic difference.  
+	\end{itemize}
+}
+
+
+
+\section{Model Selection}
+\subsection*{}
+\frame
+{
+	\frametitle{Model Selection to the Rescue?}
+	\begin{itemize}
+	\item Q: What happens when you run the same data through 20 different models?  
+	\item A: They disagree!  
+	\item But:  We can use model selection techniques (?)
 	\end{itemize}
 }
 \frame
 {
-	\frametitle{Thesis}
+	\frametitle{Model Selection: The Common Strategy}
 	\begin{enumerate}
-		\item {Statistical models have structural uncertainty}
-		\item {This structural uncertainty can be epistemically significant}
+	\item Construct all your models
+	\item Calculate \red{evaluation statistics} for each model
+		\begin{itemize}
+		\item AIC
+%			\begin{itemize}
+%			\item AIC can be used with non-nested models *[cite]
+%			\end{itemize}
+		\item For continuous response:  $R^2$, RSS, RMSE, \ldots.
+		\item For binary response:  Accuracy, sensitivity (FNR), precision, $\kappa$, AUROC, \ldots.
+			\begin{itemize}
+			\item With or without CV
+			\end{itemize}
+		\item ANOVA + F
+		\item \ldots
+		\end{itemize}
+	\item Select the model with the best statistic
 	\end{enumerate}
 }
-	
-	
+\frame
+{
+	\frametitle{But}
+	\makebox[\textwidth]{
+		\includegraphics[width = 1\textwidth]{../01_pred_fit.png}
+	}
+}
+
+
+\section{Questions}
+\subsection*{}
+\frame
+{
+	\frametitle{Questions}
+	\begin{enumerate}
+	\item Can AIC be used across different model specifications? 
+	\item What other methods are used in your field for model selection?  
+	\item Instead of selecting one best model, what methods are used in your field to aggregate many models?  
+	\end{enumerate}
+}
+
 
 
 
