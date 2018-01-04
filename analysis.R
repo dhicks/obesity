@@ -1,3 +1,6 @@
+This mostly runs (some problems w/ AIC)
+Though cohort datasets end up very small -- we're mostly limited to people who were the right age during NHANES 3
+
 #' ---
 #' title: "Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004"
 #' author: "Daniel J. Hicks and Catherine Womack"
@@ -44,7 +47,7 @@ load('2016-10-06.RData')
 names(bmi_breaks) = c('NA', 'underweight', 'normal', 
                       'overweight', 'obese I', 'obese II')
 
-age_cutoff = 85
+age_cutoffs = c(50, 80) * 12 + 12
 ## NB Age variables are measured in months
 
 dataf_unfltd = dataf %>% 
@@ -54,37 +57,55 @@ dataf_unfltd = dataf %>%
         ## Censor mortality at the 70-years-old cutoff: 
         ##  actual age at followup
         age.follow = age.months + follow.months.2011,
+        age.follow.years = age.follow %/% 12,
         ##  censor at 70 years old
-        age.follow.c = pmin(age.follow, age_cutoff*12+11),
+        age.follow.c = pmin(age.follow, age_cutoffs[2]),
+        age.follow.c.years = age.follow.c %/% 12,
         ##  censored followup months
         follow.months.c = age.follow.c - age.months,
         ## censored mortality
         ## 0 = alive/censored, 1 = deceased
-        mort.c = ifelse(age.follow <= age_cutoff*12+11, 
+        mort.c = ifelse(age.follow < age_cutoffs[2], 
                         as.integer(mort.2011) - 1, 0),
         ## For cross-referencing, number the rows in the unfiltered dataset
         row.num = row_number())
+rm(dataf)
 
 #+ subset_data
 ## The subset of data that actually feeds into the models
-dataf = subset(dataf_unfltd, (!smoker) & (age.months >= 50*12 + 12) & 
-                   (age.months < age_cutoff*12 + 12) & 
+dataf_censored = subset(dataf_unfltd, (!smoker) & 
+                   (age.months >= age_cutoffs[1]) & 
+                   (age.months < age_cutoffs[2]) & 
                    (follow.months.2011 > 0) &
                    # (bmi.cat != 'underweight') &
                    (bmi < 75) & 
                    !is.na(bmi) &
                    !is.na(education) & !is.na(mort.c))
 
+dataf_cohort = subset(dataf_unfltd, (!smoker) & 
+                          # (nhanes.cycle == 0) &
+                          (age.months >= age_cutoffs[1]) & 
+                          (age.months < age_cutoffs[1] + 12) &
+                          ((age.follow.c == age_cutoffs[2]) | (mort.c == 1)) &
+                          (follow.months.2011 > 0) &
+                          (bmi < 75) & 
+                          !is.na(bmi) & 
+                          !is.na(education) & !is.na(mort.c))
+
 ## descriptive statistics for each variable in the dataset
-str(dataf)
-summary(dataf)
+str(dataf_censored)
+summary(dataf_censored)
+
+str(dataf_cohort)
+summary(dataf_cohort)
 
 ## Move to a survey design object
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, 
                           weights = ~ sample.weight, 
                           nest = TRUE, 
                           data = dataf_unfltd)
-design = subset(design_unfltd, row.num %in% dataf$row.num)
+design_censored = subset(design_unfltd, row.num %in% dataf_censored$row.num)
+design_cohort = subset(design_unfltd, row.num %in% dataf_cohort$row.num)
 
 
 ## ----------------------------------------
@@ -100,17 +121,23 @@ design = subset(design_unfltd, row.num %in% dataf$row.num)
 #' The following function constructs unevaluated expressions for each model, based on `variable` (how BMI is represented) and `specification` (which model specification is used).  
 
 #+ build_expr
-build_expr = function (design, variable, specification) {
-    knots_4 = svyquantile(~ bmi, design, 1/5*1:4) %>%
-        round(digits = 2) %>%
-        str_c(collapse = ', ') %>%
-        str_c('c(', ., ')')
-    knots_6 = svyquantile(~ bmi, design, 1/7*1:6) %>%
-        round(digits = 2) %>%
-        str_c(collapse = ', ') %>%
-        str_c('c(', ., ')')
+build_expr = function (dataset, variable, specification) {
+    dataset = as.character(dataset)
     variable = as.character(variable)
     specification = as.character(specification)
+
+    design = switch(dataset, 
+                    'censored' = 'design_censored',
+                    'cohort' = 'design_cohort')
+        
+    knots_4 = svyquantile(~ bmi, eval(parse(text = design)), 1/5*1:4) %>%
+        round(digits = 2) %>%
+        str_c(collapse = ', ') %>%
+        str_c('c(', ., ')')
+    knots_6 = svyquantile(~ bmi, eval(parse(text = design)), 1/7*1:6) %>%
+        round(digits = 2) %>%
+        str_c(collapse = ', ') %>%
+        str_c('c(', ., ')')
     
     var = switch(variable, 
                  'binned' = 'bmi.cat',
@@ -124,7 +151,7 @@ build_expr = function (design, variable, specification) {
     if (specification == 'cox') {
         rhs = str_c(var, ' + sex + race.ethnicity + education')
     } else {
-        rhs = str_c(var, ' + age.follow.c + sex + race.ethnicity + education')
+        rhs = str_c(var, ' + sex + race.ethnicity + education')
     }
     
     response = switch(specification, 
@@ -138,22 +165,22 @@ build_expr = function (design, variable, specification) {
     expr = switch(specification, 
                   'cox' = as.expression(str_c(
                       'svycoxph(', form, ', ',
-                      'design = design)')),
+                      'design = ', design, ')')),
                   'linear' = as.expression(str_c(
                       'svyglm(', form, ', ',
-                      'design = design, ',
+                      'design = ', design, ', ',
                       'family = gaussian(link = "identity"))')),
                   'logistic' = as.expression(str_c(
                       'svyglm(', form, ', ',
-                      'design = design, ', 
+                      'design = ', design, ', ',
                       'family = quasibinomial(link = "logit"))')),
                   'poisson' = as.expression(str_c(
                       'svyglm(', form, ', ',
-                      'design = design, ',
+                      'design = ', design, ', ',
                       'family = quasipoisson(link = "log"))')),
                   'cloglog' = as.expression(str_c(
                       'svyglm(', form, ', ',
-                      'design = design, ', 
+                      'design = ', design, ', ',
                       'family = quasibinomial(link = "cloglog"))'))
     )
     
@@ -161,7 +188,8 @@ build_expr = function (design, variable, specification) {
 }
 
 #' The calls are kept with the model metadata, which is useful, e.g., for confirming that `build_expr` works as expected. 
-models_df = cross_df(list('variable' = forcats::as_factor(
+models_df = cross_df(list('dataset' = forcats::as_factor(c('censored')),
+                          'variable' = forcats::as_factor(
                                             c('binned', 
                                               'continuous', 
                                               'square',
@@ -172,9 +200,11 @@ models_df = cross_df(list('variable' = forcats::as_factor(
                                               'logistic', 
                                               'poisson', 
                                               'cox')))) %>%
+    filter((specification != 'cox') | (dataset == 'censored')) %>%
     mutate(model_id = row_number()) %>%
     select(model_id, everything()) %>%
-    by_row(function (df) build_expr(design, df$variable, 
+    by_row(function (df) build_expr(df$dataset, 
+                                    df$variable, 
                                     df$specification), 
            .to = 'model_expr')
 str(models_df, max.level = 1)
@@ -224,7 +254,7 @@ coefs %>%
             geom_pointrange(aes(ymin = conf.low, 
                                 ymax = conf.high), 
                             position = position_dodge(width = .75)) +
-            # facet_grid(term_group ~ ., scales = 'free') +
+            facet_grid(dataset ~ ., scales = 'free') +
             coord_flip()
     )
 
@@ -270,11 +300,11 @@ aug = models %>%
     select(-matches('Surv|bs.bmi')) %>%
     ## Join with `dataf`
     mutate(row.num = as.integer(.rownames)) %>%
-    inner_join(dataf, by = c('row.num', 'sex', 'race.ethnicity', 
+    inner_join(dataf_unfltd, by = c('row.num', 'sex', 'race.ethnicity', 
                              'education')) %>%
     ## Remove gappy bmi.x, bmi.cat.x, mort.c.x, and age.follow.c.x
     rename(bmi = bmi.y, bmi.cat = bmi.cat.y, 
-           mort.c = mort.c.y, age.follow.c = age.follow.c.y) %>%
+           mort.c = mort.c.y) %>%
     select(-contains('.x')) %>%
     ## Join with `models_df`
     mutate(model_id = as.integer(model_id)) %>%
@@ -290,17 +320,16 @@ aug = models %>%
 #     stat_ecdf() + 
 #     geom_hline(yintercept = 1 - sum(dataf$mort.c)/nrow(dataf)) +
 #     facet_grid(variable ~ specification)
-aug %>%
-    group_by(model_id, variable, specification) %>%
-    summarize(q = quantile(prob, probs = 1 - sum(mort.c)/n()))
-
-threshold = .33
+threshold = aug %>%
+    group_by(model_id, dataset, variable, specification) %>%
+    summarize(threshold = quantile(prob, probs = 1 - sum(mort.c)/n()))
 
 ## Calculate evaluation statistics
 models_df = aug %>%
     filter(!is.na(mort.c)) %>%
+    left_join(threshold) %>%
     mutate(prediction = ifelse(prob > threshold, 1, 0)) %>% 
-    group_by(variable, specification) %>%
+    group_by(dataset, variable, specification) %>%
     summarize(accuracy = mean(prediction == mort.c), 
               precision = sum(prediction * mort.c)/sum(mort.c), 
               recall = sum(prediction * mort.c)/sum(prediction), 
@@ -316,33 +345,38 @@ roc_curves = models_df$roc_curve %>%
     bind_rows(.id = 'model_id') %>%
     as_tibble() %>%
     mutate(model_id = as.integer(model_id)) %>%
-    left_join(select(models_df, model_id, variable, specification))
+    left_join(select(models_df, model_id, dataset, variable, specification))
 ggplot(roc_curves, aes(fpr, tpr, 
-                       group = interaction(variable, specification), 
+                       group = interaction(dataset, variable, specification), 
                        color = specification)) + 
     geom_line() +
     geom_segment(x = 0, y = 0, xend = 1, yend = 1,
                  linetype = 'dashed',
-                 inherit.aes = FALSE)
+                 inherit.aes = FALSE) +
+    facet_wrap(~ dataset)
 
 ## Sortable table FTW
 models_df %>%
-    select(variable, specification, 
-           AIC, accuracy, f1, auroc) %>%
+    select(dataset, variable, specification, 
+           # AIC, 
+           accuracy, f1, auroc) %>%
     ## 3 digits of precision
-    mutate_at(c('AIC', 'accuracy', 'f1', 'auroc'), 
+    mutate_at(c(#'AIC', 
+        'accuracy', 'f1', 'auroc'), 
               funs(signif(., digits = 3))) %>%
     datatable()
 
 ## Plot of evaluation statistics
 pred_fid_plot = models_df %>%
-    select(variable, specification, 
-           AIC, accuracy, f1, auroc) %>%
-    gather(statistic, score, AIC:auroc) %>%
-    ggplot(aes(1, score, 
+    select(dataset, variable, specification, 
+           #AIC, 
+           accuracy, f1, auroc) %>%
+    gather(statistic, score, #AIC
+           accuracy:auroc) %>%
+    ggplot(aes(dataset, score, 
                color = variable, shape = specification)) + 
     geom_point(position = position_dodge(width = .5)) + 
-    scale_x_continuous(breaks = NULL, limits = c(0,2), name = '') +
+    # scale_x_continuous(breaks = NULL, limits = c(0,2), name = '') +
     facet_wrap(~ statistic, scales = 'free')
 
 save_plot('01_pred_fit.png', pred_fid_plot, 
@@ -361,13 +395,13 @@ save_plot('01_pred_fit.png', pred_fid_plot,
 #' TODO: write some things! 
 ## Initialize a data frame to hold the predictions
 predictions = expand.grid(
-    bmi = seq(16, 45, .1),
-    age.follow.c = svymean(~ age.follow.c, design)[1],
-    sex = factor('female', levels = levels(dataf$sex)),
+    bmi = seq(19, 45, .1),
+    age.follow.c = svymean(~ age.follow.c, design_censored)[1],
+    sex = factor('female', levels = levels(dataf_censored$sex)),
     race.ethnicity = factor('Non-Hispanic White', 
-                            levels = levels(dataf$race.ethnicity)), 
+                            levels = levels(dataf_censored$race.ethnicity)), 
     education = factor('High School', 
-                       levels = levels(dataf$education)))
+                       levels = levels(dataf_censored$education)))
 
 ## Get binned labels from the continuous BMI values
 bmi_classify = function (bmi) {
@@ -420,11 +454,11 @@ pred_plot = ggplot(predictions, aes(bmi, risk_rel,
     scale_linetype_manual(values = c('solid', 'dashed', 'dotted', 'dotdash')) +
     coord_cartesian(ylim = c(.5, 2)) +
     ylab('relative risk')
-pred_plot + facet_grid(~ variable)
-save_plot('02_rr_preds.png', pred_plot + facet_grid(~ variable), 
+pred_plot + facet_grid(dataset ~ variable)
+save_plot('02_rr_preds.png', pred_plot + facet_grid(dataset ~ variable), 
           base_width = 10, base_height = 5)
-pred_plot + facet_grid(~ specification)
-save_plot('03_rr_preds.png', pred_plot + facet_grid(~ specification), 
+pred_plot + facet_grid(dataset ~ specification)
+save_plot('03_rr_preds.png', pred_plot + facet_grid(dataset ~ specification), 
           base_width = 10, base_height = 5)
 
 #' Both plots show the same set of 16 predictions.  The first plot groups the predictions by variable, allowing us to compare different model specifications.  Above the "normal" BMI range, the Cox model generally produces much higher risk estimates than the other three.  For the spline variables, all of the models see a dramatic increase at the left and right edges of the plot; this is due in part to the basis vectors, which act as simple cubics as we approach the edges of the data.  
