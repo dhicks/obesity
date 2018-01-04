@@ -338,7 +338,6 @@ models_df %>%
 pred_fid_plot = models_df %>%
     select(variable, specification, 
            AIC, accuracy, f1, auroc) %>%
-    mutate(AIC = -AIC) %>%
     gather(statistic, score, AIC:auroc) %>%
     ggplot(aes(1, score, 
                color = variable, shape = specification)) + 
