@@ -1,4 +1,4 @@
-TODO: try to use sampling weights to get better OOS accuracy statistics
+# TODO: try to use sampling weights to get better OOS accuracy statistics
 
 #' ---
 #' title: "Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004"
@@ -352,15 +352,19 @@ threshold = aug %>%
     summarize(threshold = quantile(prob, probs = 1 - sum(mort.c)/n()))
 
 ## Calculate evaluation statistics
+## Accuracy, precision, recall, and F1 are calculated using the Horvitz-Thompson estimator (see Lumley 2010, 17ff, 22)
 models_df = aug %>%
     filter(!is.na(mort.c)) %>%
     left_join(threshold) %>%
     mutate(prediction = ifelse(prob > threshold, 1, 0)) %>% 
     group_by(dataset, variable, specification) %>%
-    summarize(accuracy = mean(prediction == mort.c), 
-              precision = sum(prediction * mort.c)/sum(mort.c), 
-              recall = sum(prediction * mort.c)/sum(prediction), 
-              f1 = 2*1/(1/precision + 1/recall), 
+    summarize(n_hat = sum(sample.weight), 
+              accuracy = 1/n_hat * sum((prediction == mort.c) * sample.weight), 
+              precision = sum(prediction * mort.c * sample.weight) / 
+                  sum(mort.c * sample.weight), 
+              recall = sum(prediction * mort.c * sample.weight) / 
+                  sum(prediction * sample.weight), 
+              f1 = 2*1/(1/precision + 1/recall),
               roc_curve = list(roc(prob, as.factor(mort.c))),
               auroc = {map(roc_curve, auc) %>% unlist()}) %>%
     ungroup() %>%
@@ -394,8 +398,8 @@ models_df %>%
 ## Plot of evaluation statistics
 pred_fid_plot = models_df %>%
     select(dataset, variable, specification, 
-           AIC, accuracy, f1, auroc) %>%
-    gather(statistic, score, AIC,
+           AIC, accuracy, precision, recall, f1, auroc) %>%
+    gather(statistic, score, AIC, precision, recall,
            accuracy:auroc) %>%
     ggplot(aes(dataset, score, 
                color = variable, shape = specification)) + 
