@@ -1,6 +1,3 @@
-This mostly runs (some problems w/ AIC)
-Though cohort datasets end up very small -- we're mostly limited to people who were the right age during NHANES 3
-
 #' ---
 #' title: "Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004"
 #' author: "Daniel J. Hicks and Catherine Womack"
@@ -47,18 +44,19 @@ load('2016-10-06.RData')
 names(bmi_breaks) = c('NA', 'underweight', 'normal', 
                       'overweight', 'obese I', 'obese II')
 
-age_cutoffs = c(50, 80) * 12 + 12
+age_cutoffs = c(50, 85) * 12 + 12
+window = 5 * 12
 ## NB Age variables are measured in months
 
 dataf_unfltd = dataf %>% 
     ## Drop entries with NA id or 0 sample weight
     filter(!is.na(id), sample.weight > 0) %>%
     mutate(
-        ## Censor mortality at the 70-years-old cutoff: 
+        ## Censor mortality at the upper cutoff: 
         ##  actual age at followup
         age.follow = age.months + follow.months.2011,
         age.follow.years = age.follow %/% 12,
-        ##  censor at 70 years old
+        ##  censor at upper cutoff
         age.follow.c = pmin(age.follow, age_cutoffs[2]),
         age.follow.c.years = age.follow.c %/% 12,
         ##  censored followup months
@@ -72,7 +70,8 @@ dataf_unfltd = dataf %>%
 rm(dataf)
 
 #+ subset_data
-## The subset of data that actually feeds into the models
+## The data subsets used by the models
+## 1. Censored dataset, designed for survival analysis
 dataf_censored = subset(dataf_unfltd, (!smoker) & 
                    (age.months >= age_cutoffs[1]) & 
                    (age.months < age_cutoffs[2]) & 
@@ -82,10 +81,13 @@ dataf_censored = subset(dataf_unfltd, (!smoker) &
                    !is.na(bmi) &
                    !is.na(education) & !is.na(mort.c))
 
+## 2. "Cohort" dataset, the kind you might try to use w/ GLM
 dataf_cohort = subset(dataf_unfltd, (!smoker) & 
-                          # (nhanes.cycle == 0) &
+                          (nhanes.cycle == 0) &
+                          ## Individuals w/ in the age window for the cohort
                           (age.months >= age_cutoffs[1]) & 
-                          (age.months < age_cutoffs[1] + 12) &
+                          (age.months < age_cutoffs[1] + window) &
+                          ## Who either aged our successfully or died
                           ((age.follow.c == age_cutoffs[2]) | (mort.c == 1)) &
                           (follow.months.2011 > 0) &
                           (bmi < 75) & 
@@ -98,6 +100,10 @@ summary(dataf_censored)
 
 str(dataf_cohort)
 summary(dataf_cohort)
+
+## NB With cutoffs of 50; 85 and a 5-year window, the cohort has only 64 participants
+## We can increase the cohort using a lower upper cutoff, eg, 50; 65 gives 386 participants
+## But this is still too small to build a good regression across all of our covariates
 
 ## Move to a survey design object
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, 
@@ -155,7 +161,7 @@ build_expr = function (dataset, variable, specification) {
     }
     
     response = switch(specification, 
-                      'cox' = 'Surv(age.follow.c, mort.c)',
+                      'cox' = 'Surv(age.follow.c.years, mort.c)',
                       'linear' = 'mort.c',
                       'poisson' = 'mort.c',
                       'logistic' = 'mort.c',
@@ -200,7 +206,7 @@ models_df = cross_df(list('dataset' = forcats::as_factor(c('censored')),
                                               'logistic', 
                                               'poisson', 
                                               'cox')))) %>%
-    filter((specification != 'cox') | (dataset == 'censored')) %>%
+    # filter((specification != 'cox') | (dataset == 'censored')) %>%
     mutate(model_id = row_number()) %>%
     select(model_id, everything()) %>%
     by_row(function (df) build_expr(df$dataset, 
@@ -358,26 +364,25 @@ ggplot(roc_curves, aes(fpr, tpr,
 ## Sortable table FTW
 models_df %>%
     select(dataset, variable, specification, 
-           # AIC, 
-           accuracy, f1, auroc) %>%
+           AIC,accuracy, f1, auroc) %>%
     ## 3 digits of precision
-    mutate_at(c(#'AIC', 
-        'accuracy', 'f1', 'auroc'), 
+    mutate_at(c('AIC', 'accuracy', 'f1', 'auroc'), 
               funs(signif(., digits = 3))) %>%
-    datatable()
+    datatable(filter = 'top')
 
 ## Plot of evaluation statistics
 pred_fid_plot = models_df %>%
     select(dataset, variable, specification, 
-           #AIC, 
-           accuracy, f1, auroc) %>%
-    gather(statistic, score, #AIC
+           AIC, accuracy, f1, auroc) %>%
+    gather(statistic, score, AIC,
            accuracy:auroc) %>%
     ggplot(aes(dataset, score, 
                color = variable, shape = specification)) + 
     geom_point(position = position_dodge(width = .5)) + 
     # scale_x_continuous(breaks = NULL, limits = c(0,2), name = '') +
+    scale_color_brewer(palette = 'Set1') +
     facet_wrap(~ statistic, scales = 'free')
+pred_fid_plot
 
 save_plot('01_pred_fit.png', pred_fid_plot, 
           base_width = 6, base_height = 4)
@@ -395,8 +400,8 @@ save_plot('01_pred_fit.png', pred_fid_plot,
 #' TODO: write some things! 
 ## Initialize a data frame to hold the predictions
 predictions = expand.grid(
-    bmi = seq(19, 45, .1),
-    age.follow.c = svymean(~ age.follow.c, design_censored)[1],
+    bmi = seq(16, 45, .1),
+    age.follow.c.years = svymean(~ age.follow.c.years, design_censored)[1],
     sex = factor('female', levels = levels(dataf_censored$sex)),
     race.ethnicity = factor('Non-Hispanic White', 
                             levels = levels(dataf_censored$race.ethnicity)), 
