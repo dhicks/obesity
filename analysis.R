@@ -1,3 +1,5 @@
+TODO: try to use sampling weights to get better OOS accuracy statistics
+
 #' ---
 #' title: "Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004"
 #' author: "Daniel J. Hicks and Catherine Womack"
@@ -105,12 +107,37 @@ summary(dataf_cohort)
 ## We can increase the cohort using a lower upper cutoff, eg, 50; 65 gives 386 participants
 ## But this is still too small to build a good regression across all of our covariates
 
-## Move to a survey design object
+## Split into training and validation sets
+train_frac = .7
+set.seed(42)
+dataf_censored_train = dataf_censored %>%
+    mutate(psu_ = str_c(stratum, '_', psu)) %>%
+    group_by(psu_) %>%
+    sample_frac(size = train_frac, weight = 1/sample.weight)
+dataf_censored_valid = dataf_censored %>%
+    filter(!(row.num %in% dataf_censored_train$row.num))
+
+## Move to survey design objects
 design_unfltd = svydesign(id = ~ psu, strata = ~ stratum, 
                           weights = ~ sample.weight, 
                           nest = TRUE, 
                           data = dataf_unfltd)
 design_censored = subset(design_unfltd, row.num %in% dataf_censored$row.num)
+## NB Two routes to test and validation sets; both yield the same sample weights
+# design_censored_train1 = subset(design_unfltd,
+#                                 row.num %in% dataf_censored_train$row.num)
+# design_censored_train2 = subset(design_censored,
+#                                 row.num %in% dataf_censored_train$row.num)
+# tibble(train1 = design_censored_train1$variables$sample.weight,
+#        train2 = design_censored_train2$variables$sample.weight,
+#        df = dataf_censored_train$sample.weight) %>%
+#     mutate(same = train1 == train2) %>%
+#     summarize(frac_same = sum(same) / n())
+design_censored_train = subset(design_unfltd, 
+                               row.num %in% dataf_censored_train$row.num)
+design_censored_valid = subset(design_unfltd, 
+                               row.num %in% dataf_censored_valid$row.num)
+
 design_cohort = subset(design_unfltd, row.num %in% dataf_cohort$row.num)
 
 
@@ -133,7 +160,7 @@ build_expr = function (dataset, variable, specification) {
     specification = as.character(specification)
 
     design = switch(dataset, 
-                    'censored' = 'design_censored',
+                    'censored' = 'design_censored_train',
                     'cohort' = 'design_cohort')
         
     knots_4 = svyquantile(~ bmi, eval(parse(text = design)), 1/5*1:4) %>%
@@ -194,6 +221,7 @@ build_expr = function (dataset, variable, specification) {
 }
 
 #' The calls are kept with the model metadata, which is useful, e.g., for confirming that `build_expr` works as expected. 
+## NB The next line uses only the `censored` dataset.  If other datasets are used, modifications will be needed when OOS accuracy statistics are calculated
 models_df = cross_df(list('dataset' = forcats::as_factor(c('censored')),
                           'variable' = forcats::as_factor(
                                             c('binned', 
@@ -299,19 +327,12 @@ models_df = models %>%
 ## Use `augment` to generate predictions
 ## `augment.coxph` doesn't return mort.c, but instead a Surv variable that doesn't play nicely with the dplyr functions. To get mort.c, we need to join it with `dataf`. But this creates a bunch of non-overlapping variables (e.g., bmi and bmi.cat are NA when they're not included in a given model). So then we need to rename and remove the gappy variables. 
 aug = models %>%
-    ## `augment` generates the predictions
-    map(augment, type.predict = 'expected', type = 'response') %>%
+    ## `augment.lm` has problems w/ newdata; tries to bind it to original dataframe?
+    map2(ifelse(map(models, is, 'glm'), 'response', 'expected'), 
+         ~ predict(.x, newdata = dataf_censored_valid,
+                   type = .y)) %>%
+    map(~ bind_cols(dataf_censored_valid, tibble(.fitted = .x))) %>%
     bind_rows(.id = 'model_id') %>%
-    ## Remove some problem variables
-    select(-matches('Surv|bs.bmi')) %>%
-    ## Join with `dataf`
-    mutate(row.num = as.integer(.rownames)) %>%
-    inner_join(dataf_unfltd, by = c('row.num', 'sex', 'race.ethnicity', 
-                             'education')) %>%
-    ## Remove gappy bmi.x, bmi.cat.x, mort.c.x, and age.follow.c.x
-    rename(bmi = bmi.y, bmi.cat = bmi.cat.y, 
-           mort.c = mort.c.y) %>%
-    select(-contains('.x')) %>%
     ## Join with `models_df`
     mutate(model_id = as.integer(model_id)) %>%
     right_join(models_df, .) %>%
@@ -406,7 +427,8 @@ predictions = expand.grid(
     race.ethnicity = factor('Non-Hispanic White', 
                             levels = levels(dataf_censored$race.ethnicity)), 
     education = factor('High School', 
-                       levels = levels(dataf_censored$education)))
+                       levels = levels(dataf_censored$education)), 
+    mort.c = 0)
 
 ## Get binned labels from the continuous BMI values
 bmi_classify = function (bmi) {
@@ -418,11 +440,29 @@ predictions = predictions %>%
             factor(levels = names(bmi_breaks), ordered = FALSE) %>%
             C(treatment, base = 2)})
 
+## NB There are small differences between Cox "risk" and "expected" predictions
+## possibly standard errors are different? that's more complicated to check
+# thing = tibble(risk = predict(models[[20]], predictions, type = 'risk'),
+#                prob = 1 - exp(- predict(models[[20]], predictions, type = 'expected'))) %>%
+#     bind_cols(predictions, .)
+# 
+# baselines = thing %>%
+#     filter(bmi == 22) %>%
+#     select(baseline_risk = risk, baseline_prob = prob)
+# thing$baseline_risk = baselines$baseline_risk
+# thing$baseline_prob = baselines$baseline_prob
+# 
+# thing %>%
+#     mutate(risk_rel = risk / baseline_risk,
+#            prob_rel = prob / baseline_prob) %>%
+#     ggplot(aes(risk_rel, prob_rel)) + geom_point() +
+#     stat_function(fun = function (x) x, color = 'red')
+
 ## Generate the predictions and arrange in a single dataframe
 predictions = models %>%
-    map_if(function (x) 'svycoxph' %in% class(x), 
+    map_if(function (x) is(x, 'svycoxph'), 
            predict, predictions, type = 'risk', se = TRUE) %>%
-    map_if(function (x) 'svyglm' %in% class(x),
+    map_if(function (x) is(x, 'svyglm'),
            predict, predictions, type = 'response') %>%
     map(as_tibble) %>%
     map(`names<-`, c('fit', 'se')) %>%
@@ -450,7 +490,7 @@ pred_plot = ggplot(predictions, aes(bmi, risk_rel,
                                     linetype = specification)) + 
     geom_hline(yintercept = 1) +
     geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
-                alpha = .25) +
+                alpha = .1) +
     geom_step(aes(color = variable), size = 1) +
     geom_point(x = 22, y = 1, inherit.aes = FALSE) +
     scale_x_continuous(breaks = bmi_breaks, 
