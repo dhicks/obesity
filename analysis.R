@@ -329,7 +329,7 @@ models_df = models %>%
 aug = models %>%
     ## `augment.lm` has problems w/ newdata; tries to bind it to original dataframe?
     map2(ifelse(map(models, is, 'glm'), 'response', 'expected'), 
-         ~ predict(.x, newdata = dataf_censored_valid,
+         ~ predict(.x, newdata = design_censored_valid$variables,
                    type = .y)) %>%
     map(~ bind_cols(dataf_censored_valid, tibble(.fitted = .x))) %>%
     bind_rows(.id = 'model_id') %>%
@@ -359,8 +359,9 @@ models_df = aug %>%
     mutate(prediction = ifelse(prob > threshold, 1, 0)) %>% 
     group_by(dataset, variable, specification) %>%
     summarize(n_hat = sum(sample.weight), 
-              accuracy = 1/n_hat * sum((prediction == mort.c) * sample.weight), 
-              precision = sum(prediction * mort.c * sample.weight) / 
+              accuracy = 1/n_hat * 
+                  sum((prediction == mort.c) * sample.weight), 
+              precision = sum(prediction * mort.c * sample.weight) /
                   sum(mort.c * sample.weight), 
               recall = sum(prediction * mort.c * sample.weight) / 
                   sum(prediction * sample.weight), 
@@ -376,9 +377,12 @@ roc_curves = models_df$roc_curve %>%
     bind_rows(.id = 'model_id') %>%
     as_tibble() %>%
     mutate(model_id = as.integer(model_id)) %>%
-    left_join(select(models_df, model_id, dataset, variable, specification))
+    left_join(select(models_df, model_id, 
+                     dataset, variable, specification))
 ggplot(roc_curves, aes(fpr, tpr, 
-                       group = interaction(dataset, variable, specification), 
+                       group = interaction(dataset, 
+                                           variable, 
+                                           specification), 
                        color = specification)) + 
     geom_line() +
     geom_segment(x = 0, y = 0, xend = 1, yend = 1,
