@@ -1,5 +1,3 @@
-# TODO: try to use sampling weights to get better OOS accuracy statistics
-
 #' ---
 #' title: "Analysis of BMI and All-Cause Morality in NHANES III and NHANES 1999-2004"
 #' author: "Daniel J. Hicks and Catherine Womack"
