@@ -45,7 +45,7 @@ names(bmi_breaks) = c('NA', 'underweight', 'normal',
                       'overweight', 'obese I', 'obese II')
 
 age_cutoffs = c(50, 85) * 12 + 12
-window = 5 * 12
+window = 5 * 12  # age window for cohort sample
 ## NB Age variables are measured in months
 
 dataf_unfltd = dataf %>% 
@@ -221,13 +221,12 @@ build_expr = function (dataset, variable, specification) {
 #' The calls are kept with the model metadata, which is useful, e.g., for confirming that `build_expr` works as expected. 
 ## NB The next line uses only the `censored` dataset.  If other datasets are used, modifications will be needed when OOS accuracy statistics are calculated
 models_df = cross_df(list('dataset' = forcats::as_factor(c('censored')),
-                          'variable' = forcats::as_factor(
+                          'covariate' = forcats::as_factor(
                                             c('binned', 
                                               'continuous', 
                                               'square',
-                                              '4-spline', 
-                                              '6-spline')),
-                         'specification' = forcats::as_factor(
+                                              '4-spline')),
+                         'model' = forcats::as_factor(
                                             c('linear', 
                                               'logistic', 
                                               'poisson', 
@@ -236,8 +235,8 @@ models_df = cross_df(list('dataset' = forcats::as_factor(c('censored')),
     mutate(model_id = row_number()) %>%
     select(model_id, everything()) %>%
     by_row(function (df) build_expr(df$dataset, 
-                                    df$variable, 
-                                    df$specification), 
+                                    df$covariate, 
+                                    df$model), 
            .to = 'model_expr')
 str(models_df, max.level = 1)
 
@@ -279,9 +278,9 @@ coefs = models %>%
 coefs %>%
     split(.$term_group) %>%
     map(~
-            ggplot(.x, aes(term, estimate, color = variable, 
-                           linetype = specification, 
-                           shape = specification)) + 
+            ggplot(.x, aes(term, estimate, color = covariate, 
+                           linetype = model, 
+                           shape = model)) + 
             # geom_point(position = position_dodge(width = .25)) +
             geom_pointrange(aes(ymin = conf.low, 
                                 ymax = conf.high), 
@@ -323,7 +322,6 @@ models_df = models %>%
     full_join(models_df, .)
 
 ## Use `augment` to generate predictions
-## `augment.coxph` doesn't return mort.c, but instead a Surv variable that doesn't play nicely with the dplyr functions. To get mort.c, we need to join it with `dataf`. But this creates a bunch of non-overlapping variables (e.g., bmi and bmi.cat are NA when they're not included in a given model). So then we need to rename and remove the gappy variables. 
 aug = models %>%
     ## `augment.lm` has problems w/ newdata; tries to bind it to original dataframe?
     map2(ifelse(map(models, is, 'glm'), 'response', 'expected'), 
@@ -335,9 +333,22 @@ aug = models %>%
     mutate(model_id = as.integer(model_id)) %>%
     right_join(models_df, .) %>%
     ## For Cox models, survival probability = exp(-expected)
-    mutate(prob = ifelse(specification != 'cox', 
+    mutate(prob = ifelse(model != 'cox', 
                          .fitted, 
                          1 - exp(-.fitted)))
+
+## Mortality rates estimated from training and validation sets
+mort_rate_train = with(design_censored_train$variables, 
+     sum(sample.weight * mort.c) / sum(sample.weight))
+mort_rate_valid = with(design_censored_valid$variables, 
+     sum(sample.weight * mort.c) / sum(sample.weight))
+## Accuracy, precision, recall, and F1 for null model
+accuracy_null = mort_rate_train * mort_rate_valid + 
+    (1 - mort_rate_train) * (1 - mort_rate_valid)
+precision_null = mort_rate_train
+recall_null = mort_rate_valid
+f1_null = 2*1/(1/precision_null + 1/recall_null)
+    
 
 ## Plot the distribution of probabilities; 
 ## use these to select an appropriate threshold
@@ -346,8 +357,9 @@ aug = models %>%
 #     geom_hline(yintercept = 1 - sum(dataf$mort.c)/nrow(dataf)) +
 #     facet_grid(variable ~ specification)
 threshold = aug %>%
-    group_by(model_id, dataset, variable, specification) %>%
-    summarize(threshold = quantile(prob, probs = 1 - sum(mort.c)/n()))
+    group_by(model_id, dataset, covariate, model) %>%
+    summarize(threshold = quantile(prob, 
+                                   probs = 1 - mort_rate_train))
 
 ## Calculate evaluation statistics
 ## Accuracy, precision, recall, and F1 are calculated using the Horvitz-Thompson estimator (see Lumley 2010, 17ff, 22)
@@ -355,15 +367,19 @@ models_df = aug %>%
     filter(!is.na(mort.c)) %>%
     left_join(threshold) %>%
     mutate(prediction = ifelse(prob > threshold, 1, 0)) %>% 
-    group_by(dataset, variable, specification) %>%
+    group_by(dataset, covariate, model) %>%
     summarize(n_hat = sum(sample.weight), 
               accuracy = 1/n_hat * 
                   sum((prediction == mort.c) * sample.weight), 
+              accuracy_rel = accuracy - accuracy_null,
               precision = sum(prediction * mort.c * sample.weight) /
                   sum(mort.c * sample.weight), 
+              precision_rel = precision - precision_null,
               recall = sum(prediction * mort.c * sample.weight) / 
                   sum(prediction * sample.weight), 
+              recall_rel = recall - recall_null,
               f1 = 2*1/(1/precision + 1/recall),
+              f1_rel = f1 - f1_null,
               roc_curve = list(roc(prob, as.factor(mort.c))),
               auroc = {map(roc_curve, auc) %>% unlist()}) %>%
     ungroup() %>%
@@ -376,12 +392,12 @@ roc_curves = models_df$roc_curve %>%
     as_tibble() %>%
     mutate(model_id = as.integer(model_id)) %>%
     left_join(select(models_df, model_id, 
-                     dataset, variable, specification))
+                     dataset, covariate, model))
 ggplot(roc_curves, aes(fpr, tpr, 
                        group = interaction(dataset, 
-                                           variable, 
-                                           specification), 
-                       color = specification)) + 
+                                           covariate, 
+                                           model), 
+                       color = model)) + 
     geom_line() +
     geom_segment(x = 0, y = 0, xend = 1, yend = 1,
                  linetype = 'dashed',
@@ -390,7 +406,7 @@ ggplot(roc_curves, aes(fpr, tpr,
 
 ## Sortable table FTW
 models_df %>%
-    select(dataset, variable, specification, 
+    select(dataset, covariate, model, 
            AIC,accuracy, f1, auroc) %>%
     ## 3 digits of precision
     mutate_at(c('AIC', 'accuracy', 'f1', 'auroc'), 
@@ -399,12 +415,12 @@ models_df %>%
 
 ## Plot of evaluation statistics
 pred_fid_plot = models_df %>%
-    select(dataset, variable, specification, 
+    select(dataset, covariate, model, 
            AIC, accuracy, precision, recall, f1, auroc) %>%
     gather(statistic, score, AIC, precision, recall,
            accuracy:auroc) %>%
     ggplot(aes(dataset, score, 
-               color = variable, shape = specification)) + 
+               color = covariate, shape = model)) + 
     geom_point(position = position_dodge(width = .5)) + 
     # scale_x_continuous(breaks = NULL, limits = c(0,2), name = '') +
     scale_color_brewer(palette = 'Set1') +
@@ -412,6 +428,23 @@ pred_fid_plot = models_df %>%
 pred_fid_plot
 
 save_plot('01_pred_fit.png', pred_fid_plot, 
+          base_width = 8, base_height = 4)
+
+## Accuracy statistics relative to null model
+rel_pred_fid_plot = pred_fid_plot %+% 
+    {models_df %>%
+        select(dataset, covariate, model, 
+               accuracy_rel, precision_rel, recall_rel, f1_rel) %>%
+        gather(statistic, score, accuracy_rel:f1_rel)} +
+    geom_hline(yintercept = 0, linetype = 'dashed') +
+    facet_wrap(~ statistic, scales = 'free', 
+               labeller = as_labeller(function (x) {
+                   x %>%
+                       str_extract('[a-z]+1?') %>%
+                       str_c('relative ', .)
+               }))
+
+save_plot('02_rel_pred_fit.png', rel_pred_fid_plot, 
           base_width = 6, base_height = 4)
 
 #' The Cox model performs worst under all four metrics.  For the two accuracy statistics (accuracy itself and AUROC for the accuracy curve), the other three models are comparable; variable seems to be more important than model specification, with continuous BMI performing slightly worse by AUROC than the other variables across all three specifications.  F1 generally finds continuous variables and linear models to perform worse than alternatives; logistic and Poisson models with spline variables seem to perform the best, presumably because these models are more flexible for fitting non-linear trends. 
@@ -492,12 +525,12 @@ predictions = predictions %>%
 
 ## Plot predictions
 pred_plot = ggplot(predictions, aes(bmi, risk_rel, 
-                                    fill = variable,
-                                    linetype = specification)) + 
+                                    fill = covariate,
+                                    linetype = model)) + 
     geom_hline(yintercept = 1) +
     geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
                 alpha = .1) +
-    geom_step(aes(color = variable), size = 1) +
+    geom_step(aes(color = covariate), size = 1) +
     geom_point(x = 22, y = 1, inherit.aes = FALSE) +
     scale_x_continuous(breaks = bmi_breaks, 
                        labels = bmi_breaks) +
@@ -505,11 +538,11 @@ pred_plot = ggplot(predictions, aes(bmi, risk_rel,
     scale_linetype_manual(values = c('solid', 'dashed', 'dotted', 'dotdash')) +
     coord_cartesian(ylim = c(.5, 2)) +
     ylab('relative risk')
-pred_plot + facet_grid(dataset ~ variable)
-save_plot('02_rr_preds.png', pred_plot + facet_grid(dataset ~ variable), 
+pred_plot + facet_grid(dataset ~ covariate)
+save_plot('03_rr_preds.png', pred_plot + facet_grid(dataset ~ covariate), 
           base_width = 10, base_height = 5)
-pred_plot + facet_grid(dataset ~ specification)
-save_plot('03_rr_preds.png', pred_plot + facet_grid(dataset ~ specification), 
+pred_plot + facet_grid(dataset ~ model)
+save_plot('04_rr_preds.png', pred_plot + facet_grid(dataset ~ model), 
           base_width = 10, base_height = 5)
 
 #' Both plots show the same set of 16 predictions.  The first plot groups the predictions by variable, allowing us to compare different model specifications.  Above the "normal" BMI range, the Cox model generally produces much higher risk estimates than the other three.  For the spline variables, all of the models see a dramatic increase at the left and right edges of the plot; this is due in part to the basis vectors, which act as simple cubics as we approach the edges of the data.  
